@@ -2,7 +2,8 @@
 
 Une application web simple et ludique pour transformer vos images en pixel art à colorier — idéale pour les enfants, les parents, les profs ou les fans de DIY !
 
-![demo](assets/demo.png)
+![demo](assets/assets_demo.png)
+
 
 ---
 
