@@ -1,0 +1,23 @@
+/* style.css */
+
+body {
+    background: linear-gradient(to bottom right, #fceabb, #f8b500);
+    font-family: 'Segoe UI', sans-serif;
+}
+
+h1 {
+    color: #333;
+    text-align: center;
+}
+
+.stButton > button {
+    background-color: #f8b500;
+    color: white;
+    border-radius: 10px;
+    padding: 10px;
+    border: none;
+}
+
+.stSlider > div {
+    color: #444;
+}
