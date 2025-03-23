@@ -18,7 +18,6 @@ Une application web simple et ludique pour transformer vos images en pixel art �
 
 ## ▶️ Lancer l'application en local
 
-```bash
 # 1. Cloner le dépôt
 git clone https://github.com/sylvainPgt/pixelart-coloriage.git
 cd pixelart-coloriage
