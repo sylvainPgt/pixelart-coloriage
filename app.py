@@ -65,31 +65,36 @@ logo_base64 = get_base64_logo("assets/logo.png")
 st.markdown(f"""
     <div style='text-align: center;'>
         <img src="data:image/png;base64,{logo_base64}" width="80"/>
-        <h1>PixelArt à colorier</h1>
+        <h1>Crée ton Pixel Art à colorier</h1>
     </div>
 """, unsafe_allow_html=True)
 
+st.markdown("""
+<p style='font-size: 1.2rem; text-align: center; max-width: 700px; margin: auto;'>
+    📸 Uploade une image de ton choix (photo, dessin, logo…)<br>
+    🧩 L'application va la transformer en grille de <strong>Pixel Art</strong><br>
+    🎨 Tu pourras ensuite imprimer cette grille et la colorier, case par case !
+</p>
+""", unsafe_allow_html=True)
 
+# 1️⃣ SECTION - UPLOAD
+st.subheader("1️⃣ Choisis une image")
+uploaded_file = st.file_uploader("Image (JPG ou PNG)", type=["jpg", "jpeg", "png"])
 
-
-uploaded_file = st.file_uploader("Choisis une image", type=["jpg", "jpeg", "png"])
-
-grid_size = st.slider("Taille de la grille (nombre de cases)", 5, 50, 10)
+# 2️⃣ SECTION - PARAMÈTRES
+st.subheader("2️⃣ Paramètres de la grille")
+grid_size = st.slider("Taille de la grille (ex: 10 = 10x10 cases)", 5, 50, 20)
 point_radius = st.slider(
-    "Taille des points (0 = invisible, 1 = toute la case)",
-    min_value=0.0,
-    max_value=1.0,
-    value=0.12,
-    step=0.01,
-    format="%.2f"
+    "Taille des points (0 = invisible, 1 = remplit une case)",
+    min_value=0.0, max_value=1.0, value=0.12, step=0.01, format="%.2f"
 )
 
-
+# 3️⃣ SECTION - RÉSULTAT
 if uploaded_file:
+    st.subheader("3️⃣ Résultat à colorier")
     image = Image.open(uploaded_file)
     st.image(image, caption="Image d'origine", use_container_width=True)
-    
 
     buf = generate_pixel_art(image, grid_size=grid_size, point_radius=point_radius)
-    st.image(buf, caption="Grille à colorier", use_container_width=True)
-    st.download_button("Télécharger l'image", buf, file_name="grille_coloriage.png", mime="image/png")
+    st.image(buf, caption="Grille Pixel Art", use_container_width=True)
+    st.download_button("📥 Télécharger l'image", buf, file_name="grille_coloriage.png", mime="image/png")

@@ -12,11 +12,18 @@ h1 {
     margin-top: 0.5rem;
 }
 
-/* Slider label */
+/* Sliders */
 .stSlider > div {
+    font-size: 1.1rem;
     color: #222;
     font-weight: 500;
 }
+
+/* Labels de section */
+.stMarkdown {
+    font-size: 1.1rem;
+}
+
 
 /* Boutons plus jolis */
 .stButton > button {
