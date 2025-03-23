@@ -3,12 +3,29 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 import io
+import base64
+
+def get_base64_logo(path):
+    with open(path, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
 
 def local_css(file_name):
     with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+        css = f"<style>{f.read()}</style>"
+        st.markdown(css, unsafe_allow_html=True)
 
 local_css("style.css")
+
+st.markdown("""
+    <style>
+        .stApp {
+            background: linear-gradient(to bottom right, #fceabb, #f8b500);
+            background-attachment: fixed;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 
 def generate_pixel_art(image: Image.Image, grid_size=20, point_radius=0.12):
     # Redimensionnement
@@ -42,12 +59,22 @@ def generate_pixel_art(image: Image.Image, grid_size=20, point_radius=0.12):
     return buf
 
 # Interface Streamlit
-st.title("Pixel Art à colorier")
-st.image("assets/logo.png", width=120)
+# Logo + Titre centrés
+logo_base64 = get_base64_logo("assets/logo.png")
+
+st.markdown(f"""
+    <div style='text-align: center;'>
+        <img src="data:image/png;base64,{logo_base64}" width="80"/>
+        <h1>PixelArt à colorier</h1>
+    </div>
+""", unsafe_allow_html=True)
+
+
+
 
 uploaded_file = st.file_uploader("Choisis une image", type=["jpg", "jpeg", "png"])
 
-grid_size = st.slider("Taille de la grille (nombre de cases)", 5, 50, 20)
+grid_size = st.slider("Taille de la grille (nombre de cases)", 5, 50, 10)
 point_radius = st.slider(
     "Taille des points (0 = invisible, 1 = toute la case)",
     min_value=0.0,

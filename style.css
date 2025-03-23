@@ -4,16 +4,31 @@ body {
     font-family: 'Segoe UI', sans-serif;
 }
 
-.main {
-    background: linear-gradient(to bottom right, #fceabb, #f8b500);
-    padding: 2rem;
-}
-
+/* Titre custom (on injecte la balise <h1> depuis Python) */
 h1 {
     font-size: 2.5rem;
     color: #333;
-    text-align: left;
-    display: inline-block;
-    vertical-align: middle;
-    margin-left: 1rem;
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+/* Slider label */
+.stSlider > div {
+    color: #222;
+    font-weight: 500;
+}
+
+/* Boutons plus jolis */
+.stButton > button {
+    background-color: #f8b500;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 0.6rem 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.stButton > button:hover {
+    background-color: #f7a200;
 }
