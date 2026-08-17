@@ -5,3 +5,9 @@ __pycache__/
 *.pyd
 *.DS_Store
 .env
+node_modules/
+.next/
+tsconfig.tsbuildinfo
+playwright-report/
+test-results/
+artifacts/

@@ -1,4 +1,23 @@
-# 🎨 PixelArt à colorier
+# 🎨 Pixelia — Pixel art à colorier
+
+Pixelia est désormais une application Next.js responsive déployable sur Vercel. Elle permet de partir d'un modèle, d'une image locale ou d'une description textuelle, puis de colorier et exporter le résultat directement dans le navigateur.
+
+## Développement moderne
+
+```bash
+npm install
+npm run dev
+```
+
+Ouvrez ensuite `http://localhost:3000`.
+
+## Déployer sur Vercel
+
+1. Importez le dépôt depuis le tableau de bord Vercel.
+2. Vercel détecte automatiquement Next.js et exécute `npm run build`.
+3. Cliquez sur **Deploy** : aucune variable d'environnement n'est requise.
+
+Le fichier `vercel.json` documente explicitement la commande de build. L'ancien prototype Streamlit reste présent temporairement pour référence.
 
 Une application web simple et ludique pour transformer vos images en pixel art à colorier — idéale pour les enfants, les parents, les profs ou les fans de DIY !
 
