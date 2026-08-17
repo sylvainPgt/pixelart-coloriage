@@ -1,4 +1,5 @@
 venv/
+.venv*/
 __pycache__/
 *.pyc
 *.pyo
@@ -6,8 +7,11 @@ __pycache__/
 *.DS_Store
 .env
 node_modules/
+node_modules.*/
 .next/
 tsconfig.tsbuildinfo
 playwright-report/
 test-results/
 artifacts/
+*.log
+.vercel
