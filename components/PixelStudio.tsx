@@ -551,7 +551,7 @@ export default function PixelStudio() {
         <div className="hero-art">
           <PixelMiniature project={rocketProject} className="hero-pixel-grid" label="Fusée composée de véritables pixels colorés" />
           <div className="pixel-badge badge-top"><b>16 × 16</b><span>grille réelle</span></div>
-          <div className="pixel-badge badge-bottom"><b>8 couleurs</b><span>palette maîtrisée</span></div>
+          <div className="pixel-badge badge-bottom"><b>{rocketProject.palette.length} couleurs</b><span>palette maîtrisée</span></div>
         </div>
       </section>
 
