@@ -15,6 +15,8 @@ import { type PixelProject, type Rgb, quantizePixels } from "@/lib/pixel-art";
 type Mode = "templates" | "image" | "text";
 type Tool = "pencil" | "eraser" | "picker" | "fill";
 type CropMode = "cover" | "contain";
+type IdeaStyle = "cute" | "retro" | "minimal";
+type IdeaDetail = "simple" | "classic" | "detailed";
 type PaintLayer = Array<number | null>;
 type ImageSettings = {
   width: number;
@@ -32,9 +34,9 @@ type ImageSettings = {
 
 const STORAGE_KEY = "pixelia-project-v2";
 const MODE_OPTIONS: Array<[Mode, string]> = [
-  ["templates", "▦ Modèles"],
-  ["image", "↑ Une image"],
-  ["text", "✦ Motif guidé"],
+  ["text", "✦ Une idée"],
+  ["image", "↑ Une photo"],
+  ["templates", "▦ Un modèle"],
 ];
 const IMAGE_ADJUSTMENTS: Array<["brightness" | "contrast" | "saturation", string]> = [
   ["brightness", "Luminosité"],
@@ -46,6 +48,18 @@ const TOOL_OPTIONS: Array<[Tool, string, string]> = [
   ["eraser", "◇", "Gomme"],
   ["picker", "⌾", "Pipette"],
   ["fill", "▰", "Remplir"],
+];
+const PRIMARY_TOOLS = TOOL_OPTIONS.slice(0, 2);
+const ADVANCED_TOOLS = TOOL_OPTIONS.slice(2);
+const IDEA_STYLES: Array<[IdeaStyle, string, string]> = [
+  ["cute", "Mignon", "Formes douces et couleurs joyeuses"],
+  ["retro", "Rétro", "Look arcade 8-bit bien contrasté"],
+  ["minimal", "Épuré", "Silhouette simple et immédiate"],
+];
+const IDEA_DETAILS: Array<[IdeaDetail, string, string]> = [
+  ["simple", "Simple", "12 × 12"],
+  ["classic", "Classique", "16 × 16"],
+  ["detailed", "Détaillé", "24 × 24"],
 ];
 const COLOR_SETS = {
   cream: "#fffaf0",
@@ -130,33 +144,6 @@ const landscapeProject = makeProject("Lac au crépuscule", 18, 12, (x, y) => {
 
 const templates = [rocketProject, flowerProject, landscapeProject];
 
-function textProject(prompt: string, width: number, height: number): PixelProject {
-  const normalized = prompt.toLocaleLowerCase("fr");
-  if (normalized.match(/fus[ée]e|espace|robot|alien/)) {
-    return makeProject(prompt, width, height, (x, y) => {
-      const sourceX = Math.min(15, Math.floor((x + 0.5) / width * 16));
-      const sourceY = Math.min(15, Math.floor((y + 0.5) / height * 16));
-      return rocketProject.palette[rocketProject.targets[sourceY * 16 + sourceX]];
-    });
-  }
-  if (normalized.match(/fleur|soleil|jardin/)) {
-    return makeProject(prompt, width, height, (x, y) => {
-      const sourceX = Math.min(13, Math.floor((x + 0.5) / width * 14));
-      const sourceY = Math.min(13, Math.floor((y + 0.5) / height * 14));
-      return flowerProject.palette[flowerProject.targets[sourceY * 14 + sourceX]];
-    });
-  }
-
-  let seed = [...prompt].reduce((sum, character) => (sum * 33 + character.charCodeAt(0)) >>> 0, 5381);
-  const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-  const colors = [COLOR_SETS.ink, COLOR_SETS.purple, COLOR_SETS.blue, COLOR_SETS.pink, COLOR_SETS.gold];
-  return makeProject(prompt || "Motif surprise", width, height, (x, y) => {
-    const mirrorX = Math.min(x, width - 1 - x);
-    const wave = Math.sin(mirrorX * 0.85 + y * 0.52 + random() * 0.35);
-    return colors[Math.abs(Math.floor((wave + 1) * 2.25 + y / 4)) % colors.length];
-  });
-}
-
 function floodFill(layer: PaintLayer, start: number, replacement: number | null, width: number, height: number) {
   const source = layer[start];
   if (source === replacement) return layer;
@@ -202,6 +189,23 @@ function validateSavedProject(value: unknown): value is { project: PixelProject;
   return validPalette && validTargets && validPaint;
 }
 
+function validateGeneratedProject(value: unknown): value is PixelProject {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PixelProject>;
+  return Boolean(
+    candidate.version === 2
+    && typeof candidate.name === "string"
+    && Number.isInteger(candidate.width)
+    && Number.isInteger(candidate.height)
+    && Array.isArray(candidate.palette)
+    && candidate.palette.length === 6
+    && candidate.palette.every((color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color))
+    && Array.isArray(candidate.targets)
+    && candidate.targets.length === Number(candidate.width) * Number(candidate.height)
+    && candidate.targets.every((target) => Number.isInteger(target) && target >= 0 && target < 6),
+  );
+}
+
 function loadBrowserImage(dataUrl: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -212,12 +216,16 @@ function loadBrowserImage(dataUrl: string) {
 }
 
 export default function PixelStudio() {
-  const [mode, setMode] = useState<Mode>("templates");
+  const [mode, setMode] = useState<Mode>("text");
   const [project, setProject] = useState<PixelProject>(rocketProject);
   const [painted, setPainted] = useState<PaintLayer>(() => Array(rocketProject.targets.length).fill(null));
   const [selected, setSelected] = useState(1);
   const [tool, setTool] = useState<Tool>("pencil");
   const [prompt, setPrompt] = useState("");
+  const [ideaStyle, setIdeaStyle] = useState<IdeaStyle>("cute");
+  const [ideaDetail, setIdeaDetail] = useState<IdeaDetail>("classic");
+  const [ideaError, setIdeaError] = useState("");
+  const [generatingIdea, setGeneratingIdea] = useState(false);
   const [imageSettings, setImageSettings] = useState<ImageSettings>(DEFAULT_IMAGE_SETTINGS);
   const [sourceDataUrl, setSourceDataUrl] = useState<string | null>(null);
   const [sourceName, setSourceName] = useState("image");
@@ -365,6 +373,41 @@ export default function PixelStudio() {
 
   function updateImageSetting<Key extends keyof ImageSettings>(key: Key, value: ImageSettings[Key]) {
     setImageSettings((current) => ({ ...current, [key]: value }));
+  }
+
+  async function generateIdea() {
+    const cleanPrompt = prompt.trim();
+    if (cleanPrompt.length < 2) {
+      setIdeaError("Décris ton idée en quelques mots.");
+      return;
+    }
+
+    setGeneratingIdea(true);
+    setIdeaError("");
+    try {
+      const response = await fetch("/api/generate-pattern", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: cleanPrompt,
+          style: ideaStyle,
+          detail: ideaDetail,
+        }),
+      });
+      const data: unknown = await response.json();
+      const result = data as { error?: unknown; project?: unknown };
+      if (!response.ok || !validateGeneratedProject(result.project)) {
+        throw new Error(typeof result.error === "string" ? result.error : "Le motif reçu est incomplet.");
+      }
+      loadProject(result.project);
+      window.requestAnimationFrame(() => {
+        document.querySelector(".editor-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    } catch (error) {
+      setIdeaError(error instanceof Error ? error.message : "La création a échoué. Réessaie.");
+    } finally {
+      setGeneratingIdea(false);
+    }
   }
 
   async function generateFromImage(dataUrl: string, name: string, settings = imageSettings) {
@@ -516,7 +559,7 @@ export default function PixelStudio() {
   function handleModeKeys(event: KeyboardEvent<HTMLDivElement>) {
     if (!event.key.match(/ArrowLeft|ArrowRight|Home|End/)) return;
     event.preventDefault();
-    const order: Mode[] = ["templates", "image", "text"];
+    const order = MODE_OPTIONS.map(([value]) => value);
     let nextIndex = order.indexOf(mode);
     if (event.key === "ArrowRight") nextIndex = (nextIndex + 1) % order.length;
     if (event.key === "ArrowLeft") nextIndex = (nextIndex - 1 + order.length) % order.length;
@@ -537,14 +580,14 @@ export default function PixelStudio() {
     <main onPointerUp={() => { drawingRef.current = false; }} onPointerLeave={() => { drawingRef.current = false; }}>
       <nav className="nav shell" aria-label="Navigation principale">
         <a className="brand" href="#top"><span className="brand-mark">P</span> Pixelia</a>
-        <div className="nav-links"><a href="#studio">Studio</a><a href="#how">Comment ça marche</a><span className="badge">Gratuit · Privé · Local</span></div>
+        <div className="nav-links"><a href="#studio">Studio</a><a href="#how">Comment ça marche</a><span className="badge">Gratuit · Sans compte</span></div>
       </nav>
 
       <section className="hero shell" id="top">
         <div className="hero-copy">
           <span className="eyebrow">✦ Ton image, vraiment pixelisée</span>
           <h1>Transforme.<br/><em>Pixelise.</em> Crée.</h1>
-          <p>Choisis la grille, le cadrage et la palette. Pixelia fabrique un modèle net que tu peux corriger, colorier et exporter.</p>
+          <p>Décris une idée ou choisis une photo. Pixelia prépare un modèle clair que tu peux colorier et personnaliser.</p>
           <a className="primary" href="#studio">Ouvrir le studio <span>→</span></a>
           <small>✓ Aucun envoi de photo &nbsp; ✓ Projet sauvegardé localement</small>
         </div>
@@ -556,7 +599,7 @@ export default function PixelStudio() {
       </section>
 
       <section className="studio-section" id="studio"><div className="shell">
-        <div className="section-heading"><span className="eyebrow">LE STUDIO</span><h2>Du contrôle, pixel par pixel</h2><p>Pars d’un modèle, d’une image ou d’un motif guidé. Tous les réglages restent modifiables.</p></div>
+        <div className="section-heading"><span className="eyebrow">LE STUDIO</span><h2>Que veux-tu créer ?</h2><p>Choisis un point de départ. Pixelia s’occupe du reste, et les réglages fins restent disponibles si tu en as besoin.</p></div>
 
         <div className="mode-tabs" role="tablist" aria-label="Point de départ" onKeyDown={handleModeKeys}>
           {MODE_OPTIONS.map(([value, label]) => (
@@ -573,36 +616,51 @@ export default function PixelStudio() {
 
           {mode === "image" ? <div className="image-workbench">
             <div className="image-source-card">
-              <div className={`image-preview ${sourceDataUrl ? "has-image" : ""}`} style={sourceDataUrl ? { backgroundImage: `url(${sourceDataUrl})`, backgroundSize: imageSettings.cropMode, backgroundPosition: `${imageSettings.focusX}% ${imageSettings.focusY}%`, aspectRatio: `${imageSettings.width} / ${imageSettings.height}`, backgroundColor: imageSettings.background } : undefined} aria-label={sourceDataUrl ? `Aperçu du cadrage de ${sourceName}` : "Aucune image sélectionnée"} role="img">{sourceDataUrl ? null : <span>Dépose ton image ici<br/><small>PNG, JPG ou WebP</small></span>}</div>
-              <button className="primary compact" onClick={() => fileRef.current?.click()}>Choisir une image</button>
-              <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={importImage}/><p>Le fichier reste dans ce navigateur et n’est jamais envoyé.</p>
+              <div className={`image-preview ${sourceDataUrl ? "has-image" : ""}`} style={sourceDataUrl ? { backgroundImage: `url(${sourceDataUrl})`, backgroundSize: imageSettings.cropMode, backgroundPosition: `${imageSettings.focusX}% ${imageSettings.focusY}%`, aspectRatio: `${imageSettings.width} / ${imageSettings.height}`, backgroundColor: imageSettings.background } : undefined} aria-label={sourceDataUrl ? `Aperçu du cadrage de ${sourceName}` : "Aucune image sélectionnée"} role="img">{sourceDataUrl ? null : <span>Ta photo apparaîtra ici<br/><small>PNG, JPG ou WebP</small></span>}</div>
+              <button className="primary compact" onClick={() => fileRef.current?.click()}>{sourceDataUrl ? "Changer de photo" : "Choisir une photo"}</button>
+              <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={importImage}/>
+              <p>Ta photo reste dans ce navigateur et n’est jamais envoyée.</p>
             </div>
-            <div className="image-controls">
-              <div className="control-group dimensions"><label>Colonnes<input type="number" min="8" max="64" value={imageSettings.width} onChange={(event) => updateImageSetting("width", Math.max(8, Math.min(64, Number(event.target.value))))}/></label><span>×</span><label>Lignes<input type="number" min="8" max="64" value={imageSettings.height} onChange={(event) => updateImageSetting("height", Math.max(8, Math.min(64, Number(event.target.value))))}/></label></div>
-              <div className="preset-row" aria-label="Formats rapides">{[[12, 12], [16, 16], [24, 24], [32, 24]].map(([width, height]) => <button key={`${width}-${height}`} onClick={() => setImageSettings((current) => ({ ...current, width, height }))}>{width}×{height}</button>)}</div>
-              <label className="range-label"><span>Palette <b>{imageSettings.paletteSize} couleurs</b></span><input type="range" min="3" max="20" value={imageSettings.paletteSize} onChange={(event) => updateImageSetting("paletteSize", Number(event.target.value))}/></label>
-              <div className="control-group"><label>Cadrage<select value={imageSettings.cropMode} onChange={(event) => updateImageSetting("cropMode", event.target.value as CropMode)}><option value="cover">Remplir et recadrer</option><option value="contain">Afficher en entier</option></select></label><label>Fond<input aria-label="Couleur du fond transparent" type="color" value={imageSettings.background} onChange={(event) => updateImageSetting("background", event.target.value)}/></label></div>
-              {imageSettings.cropMode === "cover" ? <div className="focus-controls"><label className="range-label"><span>Position horizontale <b>{imageSettings.focusX}%</b></span><input type="range" min="0" max="100" value={imageSettings.focusX} onChange={(event) => updateImageSetting("focusX", Number(event.target.value))}/></label><label className="range-label"><span>Position verticale <b>{imageSettings.focusY}%</b></span><input type="range" min="0" max="100" value={imageSettings.focusY} onChange={(event) => updateImageSetting("focusY", Number(event.target.value))}/></label></div> : null}
-              <details className="advanced-controls"><summary>Réglages de l’image</summary>{IMAGE_ADJUSTMENTS.map(([key, label]) => <label className="range-label" key={key}><span>{label} <b>{imageSettings[key]}%</b></span><input type="range" min="50" max="160" value={imageSettings[key]} onChange={(event) => updateImageSetting(key, Number(event.target.value))}/></label>)}<label className="check-label"><input type="checkbox" checked={imageSettings.dither} onChange={(event) => updateImageSetting("dither", event.target.checked)}/> Tramage perceptuel <small>Ajoute du détail, mais aussi plus de texture.</small></label></details>
-              <button className="primary compact generate-button" disabled={!sourceDataUrl || processing} onClick={() => sourceDataUrl && void generateFromImage(sourceDataUrl, sourceName)}>{processing ? "Pixelisation…" : "Mettre à jour la grille"}</button>
+            <div className="image-controls simple-panel">
+              <fieldset className="choice-field"><legend>Niveau de détail</legend><div className="choice-cards compact-choices">{[[12, "Simple"], [16, "Classique"], [24, "Détaillé"]].map(([size, label]) => <button type="button" key={size} className={imageSettings.width === size && imageSettings.height === size ? "active" : ""} aria-pressed={imageSettings.width === size && imageSettings.height === size} onClick={() => setImageSettings((current) => ({ ...current, width: Number(size), height: Number(size) }))}><b>{label}</b><small>{size} × {size}</small></button>)}</div></fieldset>
+              <fieldset className="choice-field"><legend>Nombre de couleurs</legend><div className="choice-cards compact-choices color-counts">{[4, 8, 12].map((count) => <button type="button" key={count} className={imageSettings.paletteSize === count ? "active" : ""} aria-pressed={imageSettings.paletteSize === count} onClick={() => updateImageSetting("paletteSize", count)}><b>{count}</b><small>couleurs</small></button>)}</div></fieldset>
+              <details className="advanced-controls">
+                <summary>Réglages avancés</summary>
+                <div className="control-group dimensions"><label>Colonnes<input type="number" min="8" max="64" value={imageSettings.width} onChange={(event) => updateImageSetting("width", Math.max(8, Math.min(64, Number(event.target.value))))}/></label><span>×</span><label>Lignes<input type="number" min="8" max="64" value={imageSettings.height} onChange={(event) => updateImageSetting("height", Math.max(8, Math.min(64, Number(event.target.value))))}/></label></div>
+                <div className="control-group"><label>Cadrage<select value={imageSettings.cropMode} onChange={(event) => updateImageSetting("cropMode", event.target.value as CropMode)}><option value="cover">Remplir et recadrer</option><option value="contain">Afficher en entier</option></select></label><label>Fond<input aria-label="Couleur du fond transparent" type="color" value={imageSettings.background} onChange={(event) => updateImageSetting("background", event.target.value)}/></label></div>
+                {imageSettings.cropMode === "cover" ? <div className="focus-controls"><label className="range-label"><span>Position horizontale <b>{imageSettings.focusX}%</b></span><input type="range" min="0" max="100" value={imageSettings.focusX} onChange={(event) => updateImageSetting("focusX", Number(event.target.value))}/></label><label className="range-label"><span>Position verticale <b>{imageSettings.focusY}%</b></span><input type="range" min="0" max="100" value={imageSettings.focusY} onChange={(event) => updateImageSetting("focusY", Number(event.target.value))}/></label></div> : null}
+                {IMAGE_ADJUSTMENTS.map(([key, label]) => <label className="range-label" key={key}><span>{label} <b>{imageSettings[key]}%</b></span><input type="range" min="50" max="160" value={imageSettings[key]} onChange={(event) => updateImageSetting(key, Number(event.target.value))}/></label>)}
+                <label className="check-label"><input type="checkbox" checked={imageSettings.dither} onChange={(event) => updateImageSetting("dither", event.target.checked)}/> Texture pixelisée <small>Ajoute du détail aux transitions de couleur.</small></label>
+              </details>
+              <button className="primary compact generate-button" disabled={!sourceDataUrl || processing} onClick={() => sourceDataUrl && void generateFromImage(sourceDataUrl, sourceName)}>{processing ? "Préparation…" : sourceDataUrl ? "Créer mon pixel art" : "Choisis d’abord une photo"}</button>
               {imageError ? <p className="form-error" role="alert">{imageError}</p> : null}
             </div>
           </div> : null}
 
-          {mode === "text" ? <form className="prompt-row" onSubmit={(event) => { event.preventDefault(); loadProject(textProject(prompt, imageSettings.width, imageSettings.height)); }}><div><b>Crée un motif guidé</b><p>Le générateur local interprète des familles simples : espace, fleur, jardin ou motif abstrait.</p></div><input value={prompt} onChange={(event) => setPrompt(event.target.value)} required maxLength={80} placeholder="Une fusée violette dans l’espace…"/><button className="primary compact">Créer le motif</button></form> : null}
+          {mode === "text" ? <form className="idea-panel" onSubmit={(event) => { event.preventDefault(); void generateIdea(); }}>
+            <div className="idea-intro"><span className="idea-spark">✦</span><div><h3>Décris simplement ton idée</h3><p>Une IA légère créera une grille unique et reconnaissable à colorier.</p></div></div>
+            <label className="idea-prompt"><span>Ton idée</span><input value={prompt} onChange={(event) => setPrompt(event.target.value)} required minLength={2} maxLength={80} placeholder="Une banane souriante, un chat astronaute…"/></label>
+            <div className="prompt-suggestions" aria-label="Exemples d’idées">{["Une banane souriante", "Un chat astronaute", "Une petite maison fleurie"].map((suggestion) => <button type="button" key={suggestion} onClick={() => setPrompt(suggestion)}>{suggestion}</button>)}</div>
+            <fieldset className="choice-field"><legend>Ambiance</legend><div className="choice-cards">{IDEA_STYLES.map(([value, label, description]) => <button type="button" key={value} className={ideaStyle === value ? "active" : ""} aria-pressed={ideaStyle === value} onClick={() => setIdeaStyle(value)}><b>{label}</b><small>{description}</small></button>)}</div></fieldset>
+            <fieldset className="choice-field"><legend>Niveau de détail</legend><div className="choice-cards compact-choices">{IDEA_DETAILS.map(([value, label, dimensions]) => <button type="button" key={value} className={ideaDetail === value ? "active" : ""} aria-pressed={ideaDetail === value} onClick={() => setIdeaDetail(value)}><b>{label}</b><small>{dimensions}</small></button>)}</div></fieldset>
+            <button className="primary idea-generate" disabled={generatingIdea}>{generatingIdea ? "Pixelia dessine ton idée…" : "Créer mon pixel art"}<span aria-hidden="true">→</span></button>
+            <p className="ai-note">Ta description est envoyée au modèle IA, jamais tes photos. Maximum 12 créations toutes les 10 minutes.</p>
+            {ideaError ? <p className="form-error" role="alert">{ideaError}</p> : null}
+          </form> : null}
         </div>
 
         <div className="editor-card">
           <aside className="tools" aria-label="Outils de dessin">
-            <div><span className="label">OUTILS</span><div className="drawing-tools">{TOOL_OPTIONS.map(([value, icon, label]) => <button key={value} className={tool === value ? "active" : ""} aria-pressed={tool === value} onClick={() => setTool(value)}><span>{icon}</span>{label}</button>)}</div></div>
-            <div><span className="label">PALETTE NUMÉROTÉE</span><div className="palette">{project.palette.map((color, index) => <button key={`${index}-${color}`} className={selected === index ? "swatch selected" : "swatch"} style={{ background: color }} aria-label={`Couleur ${index + 1}, ${color}`} aria-pressed={selected === index} onClick={() => { setSelected(index); setTool("pencil"); }}><span>{index + 1}</span></button>)}</div><label className="color-editor">Ajuster la couleur {selected + 1}<input type="color" value={project.palette[selected]} onChange={(event) => changePaletteColor(event.target.value)}/></label></div>
-            <div><span className="label">PROGRESSION JUSTE</span><div className="progress-label"><b>{progress}%</b><span>{correct} corrects · {filled} remplis</span></div><div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><i style={{ width: `${progress}%` }}/></div></div>
+            <div><span className="label">DESSINER</span><div className="drawing-tools primary-tools">{PRIMARY_TOOLS.map(([value, icon, label]) => <button key={value} className={tool === value ? "active" : ""} aria-pressed={tool === value} onClick={() => setTool(value)}><span>{icon}</span>{label}</button>)}</div><details className="secondary-tools"><summary>Plus d’outils</summary><div className="drawing-tools">{ADVANCED_TOOLS.map(([value, icon, label]) => <button key={value} className={tool === value ? "active" : ""} aria-pressed={tool === value} onClick={() => setTool(value)}><span>{icon}</span>{label}</button>)}</div></details></div>
+            <div><span className="label">CHOISIS UNE COULEUR</span><div className="palette">{project.palette.map((color, index) => <button key={`${index}-${color}`} className={selected === index ? "swatch selected" : "swatch"} style={{ background: color }} aria-label={`Couleur ${index + 1}, ${color}`} aria-pressed={selected === index} onClick={() => { setSelected(index); setTool("pencil"); }}><span>{index + 1}</span></button>)}</div><details className="palette-settings"><summary>Modifier cette couleur</summary><label className="color-editor">Couleur {selected + 1}<input type="color" value={project.palette[selected]} onChange={(event) => changePaletteColor(event.target.value)}/></label></details></div>
+            <div><span className="label">TA PROGRESSION</span><div className="progress-label"><b>{progress}%</b><span>{correct} cases justes · {filled} coloriées</span></div><div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><i style={{ width: `${progress}%` }}/></div></div>
             <div className="history-actions"><button disabled={undoStack.length === 0} onClick={undo}>↶ Annuler</button><button disabled={redoStack.length === 0} onClick={redo}>↷ Rétablir</button></div>
-            <div className="tool-actions"><button className={resetPending ? "danger" : ""} onBlur={() => setResetPending(false)} onClick={requestReset}>{resetPending ? "Confirmer l’effacement" : "↺ Recommencer"}</button><button onClick={() => exportPng("current")}>↓ Progression actuelle</button><button onClick={() => exportPng("complete")}>↓ Modèle terminé</button><button onClick={() => exportPng("printable")}>▦ Grille à imprimer</button></div>
+            <button className="download-primary" onClick={() => exportPng("current")}>↓ Télécharger mon dessin</button>
+            <details className="export-menu"><summary>Autres actions</summary><div className="tool-actions"><button onClick={() => exportPng("complete")}>Voir le modèle terminé</button><button onClick={() => exportPng("printable")}>Imprimer une grille vierge</button><button className={resetPending ? "danger" : ""} onBlur={() => setResetPending(false)} onClick={requestReset}>{resetPending ? "Confirmer l’effacement" : "Recommencer le coloriage"}</button></div></details>
           </aside>
 
           <section className="canvas-wrap"><header><div><span className="status-dot"/> {progress === 100 ? "TERMINÉ" : "EN COURS"}</div><b>{project.name}</b><span>{project.width} × {project.height}</span></header>
-            <div className="view-controls"><label>Zoom <input type="range" min="50" max="200" step="10" value={zoom} onChange={(event) => setZoom(Number(event.target.value))}/><b>{zoom}%</b></label><button onClick={fitGrid}>Ajuster</button><label>Aide <input type="range" min="0" max="100" step="5" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))}/><b>{referenceOpacity}%</b></label><label className="toggle"><input type="checkbox" checked={showNumbers} onChange={(event) => setShowNumbers(event.target.checked)}/> Numéros</label><label className="toggle"><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)}/> Traits</label></div>
+            <div className="canvas-quick-actions"><button onClick={fitGrid}>Ajuster à l’écran</button><details className="view-settings"><summary>Affichage</summary><div className="view-controls"><label>Zoom <input type="range" min="50" max="200" step="10" value={zoom} onChange={(event) => setZoom(Number(event.target.value))}/><b>{zoom}%</b></label><label>Aide <input type="range" min="0" max="100" step="5" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))}/><b>{referenceOpacity}%</b></label><label className="toggle"><input type="checkbox" checked={showNumbers} onChange={(event) => setShowNumbers(event.target.checked)}/> Numéros</label><label className="toggle"><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)}/> Traits</label></div></details></div>
             <div className="coordinate-bar" aria-live="polite">{cursorCoordinates}<span>Fais défiler pour explorer les grandes grilles.</span></div>
             <div className="pixel-grid-viewport"><div className={`pixel-grid ${showGrid ? "with-grid" : "without-grid"}`} style={gridStyle} onPointerMove={handlePointerMove} onPointerLeave={() => { drawingRef.current = false; setHoveredIndex(null); }}>
               {project.targets.map((target, index) => {
@@ -617,7 +675,7 @@ export default function PixelStudio() {
         </div>
       </div></section>
 
-      <section className="how shell" id="how"><div className="section-heading"><span className="eyebrow">UNE CHAÎNE CLAIRE</span><h2>De l’image au modèle</h2></div><div className="steps"><article><span>01</span><i>⌗</i><h3>Cadre</h3><p>Choisis le format, la zone utile et les dimensions exactes.</p></article><article><span>02</span><i>▦</i><h3>Quantifie</h3><p>Pixelia construit une palette perceptuelle réellement utilisable.</p></article><article><span>03</span><i>✎</i><h3>Affine</h3><p>Zoome, corrige, annule et exporte la version dont tu as besoin.</p></article></div></section>
+      <section className="how shell" id="how"><div className="section-heading"><span className="eyebrow">AUSSI SIMPLE QUE ÇA</span><h2>Imagine, crée, colorie</h2></div><div className="steps"><article><span>01</span><i>✦</i><h3>Imagine</h3><p>Décris une idée, choisis une photo ou pars d’un modèle.</p></article><article><span>02</span><i>▦</i><h3>Découvre</h3><p>Pixelia prépare automatiquement une grille et une palette claires.</p></article><article><span>03</span><i>✎</i><h3>Colorie</h3><p>Suis les numéros, personnalise les couleurs et garde ta création.</p></article></div></section>
       <footer><div className="shell"><a className="brand" href="#top"><span className="brand-mark">P</span> Pixelia</a><p>Chaque petit carré a désormais une vraie raison d’être.</p><span>© 2026 Pixelia</span></div></footer>
     </main>
   );
