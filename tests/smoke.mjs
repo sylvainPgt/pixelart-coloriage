@@ -6,20 +6,48 @@ const browser = await chromium.launch({ channel: "chrome", headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const browserErrors = [];
 page.on("pageerror", (error) => browserErrors.push(error.message));
+const baseUrl = process.env.BASE_URL || "http://127.0.0.1:3000";
+
+const bananaTargets = Array.from({ length: 16 * 16 }, (_, index) => {
+  const x = index % 16;
+  const y = Math.floor(index / 16);
+  if (y >= 5 && y <= 10 && x >= 3 && x <= 12 && x + y >= 11 && x + y <= 21) return 2;
+  if ((x === 6 || x === 10) && y === 7) return 1;
+  if (y === 9 && x >= 7 && x <= 9) return 3;
+  return 0;
+});
+
+await page.route("**/api/generate-pattern", async (route) => {
+  await route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      project: {
+        version: 2,
+        name: "Banane souriante",
+        width: 16,
+        height: 16,
+        palette: ["#fffaf0", "#18172d", "#ffd25c", "#ff875c", "#61d889", "#7868e6"],
+        targets: bananaTargets,
+      },
+    }),
+  });
+});
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 try {
-  await page.goto(process.env.BASE_URL || "http://127.0.0.1:3000", { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
   await page.locator("main").waitFor();
   mkdirSync("artifacts", { recursive: true });
   await page.screenshot({ path: "artifacts/pixelia-desktop.png", fullPage: false });
+  await page.locator(".idea-panel").screenshot({ path: "artifacts/pixelia-idea-panel.png" });
 
   assert(await page.locator(".hero-pixel-grid > span").count() === 256, "Le héros doit être un vrai motif 16 × 16.");
   assert(await page.locator(".pixel-heart").count() === 0, "L’ancien cœur vectoriel ne doit plus exister.");
-  await page.getByRole("tab", { name: "Modèles" }).waitFor();
+  await page.getByRole("tab", { name: "Une idée" }).waitFor();
 
   const correctCell = page.locator('.pixel-grid button[aria-label*="Couleur cible 2"]').first();
   await correctCell.click();
@@ -31,19 +59,22 @@ try {
   await correctCell.click();
   assert((await correctCell.getAttribute("aria-label"))?.includes("vide"), "La gomme doit laisser une cellule vide.");
 
-  await page.getByRole("tab", { name: "Motif guidé" }).click();
-  await page.getByPlaceholder("Une fusée violette dans l’espace…").fill("Un robot dans l’espace");
-  await page.getByRole("button", { name: "Créer le motif" }).click();
-  await page.getByText("Un robot dans l’espace", { exact: true }).waitFor();
+  const invalidRequest = await page.request.post(`${baseUrl}/api/generate-pattern`, {
+    data: { prompt: "x", style: "cute", detail: "classic" },
+  });
+  assert(invalidRequest.status() === 400, "La route IA doit refuser les descriptions invalides.");
 
-  await page.getByRole("tab", { name: "Une image" }).click();
+  await page.getByPlaceholder("Une banane souriante, un chat astronaute…").fill("Une banane souriante");
+  await page.getByRole("button", { name: "Créer mon pixel art" }).click();
+  await page.getByText("Banane souriante", { exact: true }).waitFor();
+  assert(!(await page.getByRole("button", { name: "Pipette" }).isVisible()), "Les outils avancés doivent être masqués au départ.");
+
+  await page.getByRole("tab", { name: "Une photo" }).click();
   await page.locator('input[type="file"]').setInputFiles(path.resolve("assets/assets_demo.png"));
-  await page.getByRole("button", { name: "Mettre à jour la grille" }).waitFor({ state: "visible" });
-  await page.getByLabel("Colonnes").fill("12");
-  await page.getByLabel("Lignes").fill("10");
-  await page.getByRole("button", { name: "Mettre à jour la grille" }).click();
-  await page.locator(".pixel-grid button").nth(119).waitFor();
-  assert(await page.locator(".pixel-grid button").count() === 120, "La grille 12 × 10 doit contenir 120 cellules.");
+  await page.getByRole("button", { name: "Simple 12 × 12" }).click();
+  await page.getByRole("button", { name: "Créer mon pixel art" }).click();
+  await page.locator(".pixel-grid button").nth(143).waitFor();
+  assert(await page.locator(".pixel-grid button").count() === 144, "La grille simple doit contenir 144 cellules.");
   assert(await page.locator(".palette .swatch").count() <= 8, "La palette générée doit respecter la limite demandée.");
 
   await page.setViewportSize({ width: 375, height: 812 });
@@ -55,7 +86,7 @@ try {
   assert(browserErrors.length === 0, `Erreurs navigateur : ${browserErrors.join(" | ")}`);
   await page.screenshot({ path: "artifacts/pixelia-mobile.png", fullPage: true });
 
-  console.log("Pixelia: hero, drawing tools, guided motif, image quantization and mobile layout passed.");
+  console.log("Pixelia: simplified creation, validated AI flow, image quantization, drawing and mobile layout passed.");
 } finally {
   await browser.close();
 }
