@@ -5,9 +5,10 @@ import type { PixelProject } from "@/lib/pixel-art";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-const MODEL_ID = "openai/gpt-5.6-luna";
-const RATE_WINDOW_MS = 10 * 60 * 1000;
-const RATE_LIMIT = 12;
+// Qwen provides structured output in non-thinking mode at a very low cost.
+const MODEL_ID = "alibaba/qwen3.7-flash";
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+const RATE_LIMIT = 5;
 const DETAIL_SIZES = {
   simple: 12,
   classic: 16,
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
 
   if (isRateLimited(clientIdentifier(request))) {
     return Response.json(
-      { error: "Trop de créations en peu de temps. Réessaie dans quelques minutes." },
+      { error: "Tu as atteint les 5 créations autorisées cette heure-ci. Réessaie un peu plus tard." },
       { status: 429, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -81,6 +82,10 @@ export async function POST(request: Request) {
   try {
     const result = await generateText({
       model: gateway(MODEL_ID),
+      // Qwen exposes structured output in non-thinking mode. Pixelia only
+      // needs a short, constrained grid, so this also keeps latency and cost low.
+      reasoning: "none",
+      maxOutputTokens: 1200,
       output: Output.object({
         name: "pixel_art_pattern",
         description: "Un motif pixel-art reconnaissable avec une palette et des lignes indexées.",
