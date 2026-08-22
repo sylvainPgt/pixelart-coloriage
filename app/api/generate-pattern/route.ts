@@ -95,13 +95,22 @@ export async function POST(request: Request) {
 Crée une silhouette immédiatement reconnaissable à taille miniature.
 La palette contient exactement 6 couleurs hexadécimales. L'index 0 est le fond.
 Chaque ligne contient exactement ${size} chiffres de 0 à 5, sans espace.
-Le sujet doit être centré, occuper environ 70 % de la grille et rester entouré de fond.
+Le sujet doit être centré, occuper entre 25 % et 65 % de la grille et rester entouré de fond.
+Tu dois dessiner un vrai sujet : il faut au moins ${Math.ceil(size * size * 0.25)} cases non nulles. Ne renvoie jamais une grille vide.
 Utilise de grands aplats cohérents, des contours nets et évite le bruit pixel par pixel.
 Ne dessine aucun texte, lettre, chiffre, cadre ou signature.
 Pour les objets connus, respecte leur silhouette caractéristique et leurs couleurs habituelles.
 Style demandé : ${styleInstruction}.`,
-      prompt: `Dessine en pixel art : ${prompt}`,
+      prompt: `Dessine en pixel art : ${prompt}. Construis directement le motif dans les lignes indexées, pas une description.`,
     });
+
+    const foregroundCells = result.output.rows
+      .join("")
+      .split("")
+      .filter((cell) => cell !== "0").length;
+    if (foregroundCells < Math.ceil(size * size * 0.25)) {
+      throw new Error("The model returned an empty pixel-art grid.");
+    }
 
     const targets = result.output.rows.flatMap((row) =>
       [...row].map((character) => Number(character)),
