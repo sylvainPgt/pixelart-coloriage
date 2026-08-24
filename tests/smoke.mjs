@@ -41,6 +41,13 @@ function assert(condition, message) {
 try {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
   await page.locator("main").waitFor();
+  const manifestResponse = await page.request.get(`${baseUrl}/manifest.webmanifest`);
+  assert(manifestResponse.status() === 200, "Le manifeste de l’application doit être disponible.");
+  const manifest = await manifestResponse.json();
+  assert(manifest.display === "standalone" && manifest.icons.length >= 1, "Le manifeste doit permettre l’installation de Mosaipix.");
+  const serviceWorkerResponse = await page.request.get(`${baseUrl}/sw.js`);
+  assert(serviceWorkerResponse.status() === 200, "Le service worker doit être disponible.");
+  assert(serviceWorkerResponse.headers()["cache-control"]?.includes("no-cache"), "Le service worker ne doit pas être servi depuis un cache obsolète.");
   mkdirSync("artifacts", { recursive: true });
   await page.screenshot({ path: "artifacts/mosaipix-desktop.png", fullPage: false });
   await page.locator(".idea-panel").screenshot({ path: "artifacts/mosaipix-idea-panel.png" });
@@ -81,11 +88,14 @@ try {
   await page.locator('input[type="file"]').setInputFiles(path.resolve("assets/assets_demo.png"));
   await page.locator(".canvas-wrap > header").getByText("Banane souriante", { exact: true }).waitFor();
   assert(await page.locator(".pixel-grid button").count() === 256, "Choisir une photo ne doit pas lancer la transformation avant validation.");
+  await page.locator(".advanced-controls summary").click();
+  await page.getByRole("slider", { name: "Nombre précis de couleurs" }).fill("16");
+  assert(await page.getByRole("slider", { name: "Nombre précis de couleurs" }).inputValue() === "16", "Le réglage avancé doit accepter une palette de 16 couleurs.");
   await page.getByRole("button", { name: "Simple 12 × 12" }).click();
   await page.getByRole("button", { name: "Créer mon pixel art" }).click();
   await page.locator(".pixel-grid button").nth(143).waitFor();
   assert(await page.locator(".pixel-grid button").count() === 144, "La grille simple doit contenir 144 cellules.");
-  assert(await page.locator(".palette .swatch").count() <= 8, "La palette générée doit respecter la limite demandée.");
+  assert(await page.locator(".palette .swatch").count() <= 16, "La palette générée doit respecter la limite avancée demandée.");
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.getByRole("button", { name: "Plein écran" }).click();

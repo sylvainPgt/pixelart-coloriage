@@ -1,5 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans, Fraunces } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import PwaRegister from "@/components/PwaRegister";
 import "./globals.css";
 
 const sans = DM_Sans({
@@ -16,8 +18,15 @@ const display = Fraunces({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://mosaipix.com"),
+  applicationName: "Mosaipix",
   title: "Mosaipix — Pixel Art Studio",
   description: "Turn a photo or an idea into real pixel art, then color and customize it online.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Mosaipix",
+    statusBarStyle: "default",
+  },
   openGraph: {
     title: "Mosaipix — Pixel Art Studio",
     description: "Transform. Pixelate. Create. Turn any idea or photo into pixel art you can color.",
@@ -32,10 +41,18 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: "#604bd8",
+};
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr" className={`${sans.variable} ${display.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <PwaRegister />
+        <Analytics />
+      </body>
     </html>
   );
 }
