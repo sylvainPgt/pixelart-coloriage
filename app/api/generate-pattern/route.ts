@@ -10,6 +10,7 @@ export const maxDuration = 30;
 const MODEL_ID = "google/gemini-2.5-flash-lite";
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT = 5;
+const MAX_GENERATION_ATTEMPTS = 3;
 const DETAIL_SIZES = {
   simple: 12,
   classic: 16,
@@ -89,10 +90,11 @@ export async function POST(request: Request) {
     minimal: "silhouette épurée, très peu de détails, lecture immédiate",
   }[style];
 
+  let attemptsUsed = 0;
+  const failureReasons: string[] = [];
   try {
     const minimumForegroundCells = Math.ceil(size * size * 0.25);
     let output: { name: string; palette: string[]; targets: number[] } | undefined;
-    let attemptsUsed = 0;
     let retryFeedback = "";
 
     const qualityFeedback: Record<PatternQualityReason, string> = {
@@ -103,9 +105,9 @@ export async function POST(request: Request) {
       flat_blocks: "Le résultat ressemblait à des bandes ou à des rectangles uniformes.",
     };
 
-    // One corrective retry is cheaper and clearer than generating three variants
-    // for every user. The first usable motif is returned immediately.
-    for (let attempt = 0; attempt < 2 && !output; attempt += 1) {
+    // Extra attempts only run after an unusable result. Successful requests still
+    // use a single inexpensive generation, while intermittent failures recover.
+    for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS && !output; attempt += 1) {
       attemptsUsed = attempt + 1;
       try {
         const result = await generateText({
@@ -113,7 +115,7 @@ export async function POST(request: Request) {
           // Mosaipix only needs a short, constrained grid, so disabling reasoning
           // keeps latency and cost low.
           reasoning: "none",
-          temperature: attempt === 0 ? 0.65 : 0.85,
+          temperature: attempt === 0 ? 0.65 : attempt === 1 ? 0.85 : 0.75,
           maxOutputTokens: 1400,
           output: Output.object({
             name: "pixel_art_pattern",
@@ -130,7 +132,7 @@ Utilise de grands aplats cohérents, des contours nets et évite le bruit pixel 
 Ne dessine aucun texte, lettre, chiffre, cadre ou signature.
 Pour les objets connus, respecte leur silhouette caractéristique et leurs couleurs habituelles.
 Donne au motif un nom court en ${locale === "fr" ? "français" : "anglais"}.
-Style demandé : ${styleInstruction}.${attempt === 1 ? ` La première proposition a été refusée : ${retryFeedback} Redessine une silhouette différente, irrégulière et immédiatement identifiable.` : ""}`,
+Style demandé : ${styleInstruction}.${attempt > 0 ? ` La proposition précédente a été refusée : ${retryFeedback} Repars de zéro avec une silhouette différente, asymétrique si nécessaire, et immédiatement identifiable.` : ""}`,
           prompt: `Dessine en pixel art : ${prompt}. Construis directement le motif dans les lignes indexées, pas une description.`,
         });
 
@@ -143,9 +145,26 @@ Style demandé : ${styleInstruction}.${attempt === 1 ? ` La première propositio
           };
         } else {
           retryFeedback = qualityFeedback[normalized.quality.reason];
+          failureReasons.push(normalized.quality.reason);
+          console.warn(JSON.stringify({
+            level: "warning",
+            msg: "generation_attempt_rejected",
+            requestId,
+            attempt: attemptsUsed,
+            reason: normalized.quality.reason,
+          }));
         }
-      } catch {
+      } catch (error) {
         retryFeedback = "La grille ne respectait pas le format demandé.";
+        failureReasons.push("invalid_format");
+        console.warn(JSON.stringify({
+          level: "warning",
+          msg: "generation_attempt_rejected",
+          requestId,
+          attempt: attemptsUsed,
+          reason: "invalid_format",
+          errorType: error instanceof Error ? error.name : "UnknownError",
+        }));
       }
     }
 
@@ -186,6 +205,8 @@ Style demandé : ${styleInstruction}.${attempt === 1 ? ` La première propositio
       locale,
       size,
       errorType: error instanceof Error ? error.name : "UnknownError",
+      attempts: attemptsUsed,
+      failureReasons,
       ms: Date.now() - startedAt,
     }));
     return Response.json(

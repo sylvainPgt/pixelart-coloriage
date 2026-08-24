@@ -262,6 +262,7 @@ export default function PixelStudio() {
   const [ideaStyle, setIdeaStyle] = useState<IdeaStyle>("cute");
   const [ideaDetail, setIdeaDetail] = useState<IdeaDetail>("classic");
   const [ideaError, setIdeaError] = useState("");
+  const [ideaNotice, setIdeaNotice] = useState("");
   const [generatingIdea, setGeneratingIdea] = useState(false);
   const [freeImages, setFreeImages] = useState<FreeImageSuggestion[]>([]);
   const [freeImageError, setFreeImageError] = useState("");
@@ -457,6 +458,7 @@ export default function PixelStudio() {
 
     setGeneratingIdea(true);
     setIdeaError("");
+    setIdeaNotice("");
     try {
       const response = await fetch("/api/generate-pattern", {
         method: "POST",
@@ -471,7 +473,14 @@ export default function PixelStudio() {
       const data: unknown = await response.json();
       const result = data as { error?: unknown; project?: unknown };
       if (!response.ok || !validateGeneratedProject(result.project)) {
-        throw new Error(typeof result.error === "string" ? result.error : locale === "fr" ? "Le motif reçu est incomplet." : "The generated pattern is incomplete.");
+        const message = typeof result.error === "string" ? result.error : locale === "fr" ? "Le motif reçu est incomplet." : "The generated pattern is incomplete.";
+        if (response.status >= 500 && await searchFreeImages()) {
+          setIdeaNotice(locale === "fr"
+            ? "L’IA n’a pas trouvé un dessin assez lisible cette fois. Voici 3 images libres à transformer en pixel art."
+            : "The AI did not find a clear enough drawing this time. Here are 3 open images to turn into pixel art.");
+          return;
+        }
+        throw new Error(message);
       }
       loadProject(result.project, "text");
     } catch (error) {
@@ -481,12 +490,12 @@ export default function PixelStudio() {
     }
   }
 
-  async function searchFreeImages() {
+  async function searchFreeImages(): Promise<boolean> {
     const cleanPrompt = prompt.trim();
     if (cleanPrompt.length < 2) {
       setFreeImageError(locale === "fr" ? "Décris d’abord l’image recherchée." : "Describe the image you want first.");
       promptRef.current?.focus();
-      return;
+      return false;
     }
 
     setSearchingFreeImages(true);
@@ -514,9 +523,11 @@ export default function PixelStudio() {
       if (suggestions.length === 0) {
         setFreeImageError(locale === "fr" ? "Aucune image libre assez proche. Essaie une description plus simple." : "No close open image was found. Try a simpler description.");
       }
+      return suggestions.length > 0;
     } catch (error) {
       setFreeImages([]);
       setFreeImageError(error instanceof Error ? error.message : locale === "fr" ? "La recherche a échoué." : "Search failed.");
+      return false;
     } finally {
       setSearchingFreeImages(false);
     }
@@ -859,13 +870,14 @@ export default function PixelStudio() {
 
           {mode === "text" ? <form className="idea-panel" onSubmit={(event) => { event.preventDefault(); void generateIdea(); }}>
             <div className="idea-intro"><span className="idea-spark">✦</span><div><h3>{tr("Décris simplement ton idée", "Simply describe your idea")}</h3><p>{tr("Mosaipix dessinera une première version unique en quelques secondes.", "Mosaipix will draw a unique first version in a few seconds.")}</p></div></div>
-            <label className="idea-prompt"><span>{tr("Ton idée", "Your idea")}</span><input ref={promptRef} value={prompt} onChange={(event) => { setPrompt(event.target.value); setFreeImages([]); setFreeImageError(""); }} required minLength={2} maxLength={80} placeholder={tr("Une banane souriante, un chat astronaute…", "A smiling banana, an astronaut cat…")}/></label>
-            <div className="prompt-suggestions" aria-label={tr("Exemples d’idées", "Example ideas")}>{(isFrench ? ["Une banane souriante", "Un chat astronaute", "Une petite maison fleurie"] : ["A smiling banana", "An astronaut cat", "A tiny flower-covered house"]).map((suggestion) => <button type="button" key={suggestion} onClick={() => setPrompt(suggestion)}>{suggestion}</button>)}</div>
+            <label className="idea-prompt"><span>{tr("Ton idée", "Your idea")}</span><input ref={promptRef} value={prompt} onChange={(event) => { setPrompt(event.target.value); setIdeaNotice(""); setFreeImages([]); setFreeImageError(""); }} required minLength={2} maxLength={80} placeholder={tr("Une banane souriante, un chat astronaute…", "A smiling banana, an astronaut cat…")}/></label>
+            <div className="prompt-suggestions" aria-label={tr("Exemples d’idées", "Example ideas")}>{(isFrench ? ["Une banane souriante", "Un chat astronaute", "Une petite maison fleurie"] : ["A smiling banana", "An astronaut cat", "A tiny flower-covered house"]).map((suggestion) => <button type="button" key={suggestion} onClick={() => { setPrompt(suggestion); setIdeaNotice(""); setFreeImages([]); setFreeImageError(""); }}>{suggestion}</button>)}</div>
             <fieldset className="choice-field"><legend>{tr("Ambiance", "Style")}</legend><div className="choice-cards">{ideaStyles.map(([value, label, description]) => <button type="button" key={value} className={ideaStyle === value ? "active" : ""} aria-pressed={ideaStyle === value} onClick={() => setIdeaStyle(value)}><b>{label}</b><small>{description}</small></button>)}</div></fieldset>
             <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices">{ideaDetails.map(([value, label, dimensions]) => <button type="button" key={value} className={ideaDetail === value ? "active" : ""} aria-pressed={ideaDetail === value} onClick={() => setIdeaDetail(value)}><b>{label}</b><small>{dimensions}</small></button>)}</div></fieldset>
             <button className="primary idea-generate" disabled={generatingIdea}>{generatingIdea ? tr("Mosaipix dessine ton idée…", "Mosaipix is drawing your idea…") : tr("Créer mon pixel art", "Create my pixel art")}<span aria-hidden="true">→</span></button>
             <p className="ai-note">{tr("Ta description est envoyée au modèle IA, jamais tes photos. La création peut prendre quelques secondes.", "Your description is sent to the AI model, never your photos. Generation may take a few seconds.")}</p>
             {ideaError ? <p className="form-error" role="alert">{ideaError}</p> : null}
+            {ideaNotice ? <p className="form-notice" role="status">{ideaNotice}</p> : null}
             <div className="free-image-option">
               <span>{tr("Tu préfères partir d’une vraie image ?", "Would you rather start from an existing image?")}</span>
               <button type="button" className="quiet-button" disabled={searchingFreeImages} onClick={() => void searchFreeImages()}>{searchingFreeImages ? tr("Recherche…", "Searching…") : tr("Voir 3 images libres", "See 3 open images")}</button>

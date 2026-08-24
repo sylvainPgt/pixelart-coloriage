@@ -202,6 +202,7 @@ input[type="range"] { accent-color: var(--purple); }
 .check-label small { grid-column: 2; color: var(--muted); font-weight: 400; }
 .generate-button { width: 100%; }
 .form-error { margin: 0; color: #a92744; font-size: 13px; font-weight: 700; }
+.form-notice { margin: 0; padding: 10px 12px; border: 1px solid #d9d1ff; border-radius: 11px; color: #4c3b91; background: #f7f5ff; font-size: 12px; font-weight: 700; }
 .prompt-row { display: grid; grid-template-columns: 1.2fr 1fr auto; align-items: center; gap: 18px; }
 .prompt-row p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
 .idea-panel {
