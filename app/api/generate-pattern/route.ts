@@ -43,16 +43,20 @@ function clientIdentifier(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
+  const requestId = request.headers.get("x-vercel-id") ?? "local";
   let body: unknown;
   try {
     body = await request.json();
   } catch {
+    console.warn(JSON.stringify({ level: "warning", msg: "generation_rejected", reason: "invalid_json", requestId }));
     return Response.json({ error: "La demande est illisible." }, { status: 400 });
   }
 
   const parsed = requestSchema.safeParse(body);
   const requestedLocale = typeof body === "object" && body !== null && "locale" in body && body.locale === "en" ? "en" : "fr";
   if (!parsed.success) {
+    console.warn(JSON.stringify({ level: "warning", msg: "generation_rejected", reason: "invalid_request", requestId }));
     return Response.json(
       { error: requestedLocale === "fr" ? "Décris ton idée en 2 à 80 caractères." : "Describe your idea in 2 to 80 characters." },
       { status: 400, headers: { "Cache-Control": "no-store" } },
@@ -60,6 +64,7 @@ export async function POST(request: Request) {
   }
 
   if (isRateLimited(clientIdentifier(request))) {
+    console.warn(JSON.stringify({ level: "warning", msg: "generation_rate_limited", requestId }));
     return Response.json(
       { error: parsed.data.locale === "fr" ? "Tu as atteint les 5 créations autorisées cette heure-ci. Réessaie un peu plus tard." : "You have reached the limit of 5 creations per hour. Please try again later." },
       { status: 429, headers: { "Cache-Control": "no-store" } },
@@ -68,6 +73,7 @@ export async function POST(request: Request) {
 
   const { prompt, style, detail, locale } = parsed.data;
   const size = DETAIL_SIZES[detail];
+  console.log(JSON.stringify({ level: "info", msg: "generation_start", requestId, style, detail, locale, size }));
   const rowPattern = new RegExp(`^[0-5]{${size}}$`);
   const patternSchema = z.object({
     name: z.string().trim().min(1).max(48),
@@ -86,11 +92,13 @@ export async function POST(request: Request) {
   try {
     const minimumForegroundCells = Math.ceil(size * size * 0.25);
     let output: z.infer<typeof patternSchema> | undefined;
+    let attemptsUsed = 0;
 
     // Some small models occasionally comply with the JSON schema but choose an
     // all-background grid. Give them one explicit correction before failing the
     // request; this is rare and still keeps the per-creation cost very small.
     for (let attempt = 0; attempt < 2 && !output; attempt += 1) {
+      attemptsUsed = attempt + 1;
       const result = await generateText({
         model: gateway(MODEL_ID),
         // Mosaipix only needs a short, constrained grid, so disabling reasoning
@@ -148,12 +156,34 @@ Style demandé : ${styleInstruction}.${attempt === 1 ? " Ta première propositio
       targets,
     };
 
+    console.log(JSON.stringify({
+      level: "info",
+      msg: "generation_done",
+      requestId,
+      style,
+      detail,
+      locale,
+      size,
+      attempts: attemptsUsed,
+      ms: Date.now() - startedAt,
+    }));
+
     return Response.json(
       { project },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    console.error("Pixel-art generation failed", error);
+    console.error(JSON.stringify({
+      level: "error",
+      msg: "generation_failed",
+      requestId,
+      style,
+      detail,
+      locale,
+      size,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+      ms: Date.now() - startedAt,
+    }));
     return Response.json(
       { error: locale === "fr" ? "Le motif n’a pas pu être créé. Réessaie avec une description plus simple." : "The pattern could not be created. Try a simpler description." },
       { status: 502, headers: { "Cache-Control": "no-store" } },

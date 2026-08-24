@@ -197,6 +197,7 @@ input[type="range"] { accent-color: var(--purple); }
 .advanced-controls summary { cursor: pointer; font-size: 13px; font-weight: 800; }
 .advanced-controls[open] { display: grid; gap: 15px; }
 .advanced-controls[open] summary { margin-bottom: 4px; }
+.palette-range small { color: var(--muted); font-weight: 500; line-height: 1.45; }
 .check-label { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; font-size: 13px; font-weight: 700; }
 .check-label small { grid-column: 2; color: var(--muted); font-weight: 400; }
 .generate-button { width: 100%; }
