@@ -8,17 +8,8 @@ const browserErrors = [];
 page.on("pageerror", (error) => browserErrors.push(error.message));
 const baseUrl = process.env.BASE_URL || "http://127.0.0.1:3000";
 
-const bananaTargets = Array.from({ length: 16 * 16 }, (_, index) => {
-  const x = index % 16;
-  const y = Math.floor(index / 16);
-  if (y >= 5 && y <= 10 && x >= 3 && x <= 12 && x + y >= 11 && x + y <= 21) return 2;
-  if ((x === 6 || x === 10) && y === 7) return 1;
-  if (y === 9 && x >= 7 && x <= 9) return 3;
-  return 0;
-});
-
 let failPatternGeneration = false;
-await page.route("**/api/generate-pattern", async (route) => {
+await page.route("**/api/generate-image", async (route) => {
   if (failPatternGeneration) {
     await route.fulfill({
       status: 502,
@@ -29,17 +20,9 @@ await page.route("**/api/generate-pattern", async (route) => {
   }
   await route.fulfill({
     status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      project: {
-        version: 2,
-        name: "Banane souriante",
-        width: 16,
-        height: 16,
-        palette: ["#fffaf0", "#18172d", "#ffd25c", "#ff875c", "#61d889", "#7868e6"],
-        targets: bananaTargets,
-      },
-    }),
+    contentType: "image/png",
+    headers: { "X-RateLimit-Remaining": "2" },
+    path: path.resolve("assets/assets_demo.png"),
   });
 });
 
@@ -96,7 +79,7 @@ try {
   await page.getByRole("tab", { name: "Une idée" }).waitFor();
   assert(await page.locator(".editor-card").count() === 0, "L’éditeur doit rester masqué avant la première création.");
 
-  const invalidRequest = await page.request.post(`${baseUrl}/api/generate-pattern`, {
+  const invalidRequest = await page.request.post(`${baseUrl}/api/generate-image`, {
     data: { prompt: "x", style: "cute", detail: "classic" },
   });
   assert(invalidRequest.status() === 400, "La route IA doit refuser les descriptions invalides.");
@@ -113,7 +96,9 @@ try {
   await page.getByPlaceholder("Une banane souriante, un chat astronaute…").fill("Une banane souriante");
   await page.getByRole("button", { name: "Créer mon pixel art" }).click();
   await page.locator(".editor-card").waitFor();
-  await page.locator(".canvas-wrap > header").getByText("Banane souriante", { exact: true }).waitFor();
+  await page.locator(".canvas-wrap > header").getByText("Une banane souriante", { exact: true }).waitFor();
+  assert(await page.locator(".pixel-grid button").count() === 576, "La création IA classique doit utiliser une grille 24 × 24 plus lisible.");
+  await page.getByText("2 créations IA restantes pour ces 24 h.").waitFor({ state: "attached" });
   const [modelDownload] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Télécharger le modèle" }).click(),
@@ -138,14 +123,14 @@ try {
   failPatternGeneration = true;
   await page.getByPlaceholder("Une banane souriante, un chat astronaute…").fill("Un chat astronaute");
   await page.getByRole("button", { name: "Créer mon pixel art" }).click();
-  await page.getByText("L’IA n’a pas trouvé un dessin assez lisible cette fois.", { exact: false }).waitFor();
+  await page.getByText("Voici 3 images libres à transformer en pixel art.", { exact: false }).waitFor();
   assert(await page.locator(".free-image-results article").count() === 3, "Un échec IA doit proposer automatiquement trois images libres.");
   failPatternGeneration = false;
 
   await page.getByRole("tab", { name: "Une photo" }).click();
   await page.locator('input[type="file"]').setInputFiles(path.resolve("assets/assets_demo.png"));
-  await page.locator(".canvas-wrap > header").getByText("Banane souriante", { exact: true }).waitFor();
-  assert(await page.locator(".pixel-grid button").count() === 256, "Choisir une photo ne doit pas lancer la transformation avant validation.");
+  await page.locator(".canvas-wrap > header").getByText("Une banane souriante", { exact: true }).waitFor();
+  assert(await page.locator(".pixel-grid button").count() === 576, "Choisir une photo ne doit pas relancer la transformation avant validation.");
   await page.locator(".advanced-controls summary").click();
   await page.getByRole("slider", { name: "Nombre précis de couleurs" }).fill("16");
   assert(await page.getByRole("slider", { name: "Nombre précis de couleurs" }).inputValue() === "16", "Le réglage avancé doit accepter une palette de 16 couleurs.");

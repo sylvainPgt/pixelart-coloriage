@@ -7,11 +7,12 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:patterns": "node --experimental-strip-types tests/pattern-normalization.test.mts",
+    "test:rate-limit": "node --experimental-strip-types tests/rate-limit.test.mts",
     "test:e2e": "node tests/smoke.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
+    "@vercel/functions": "^3.9.5",
     "ai": "^7.0.66",
     "next": "^16.3.1",
     "react": "^19.2.8",
