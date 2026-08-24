@@ -52,8 +52,22 @@ try {
   assert(await page.locator("html").getAttribute("lang") === "en", "Le sélecteur anglais doit mettre à jour la langue du document.");
   await page.getByRole("button", { name: "FR", exact: true }).click();
   await page.getByRole("tab", { name: "Une idée" }).waitFor();
+  assert(await page.locator(".editor-card").count() === 0, "L’éditeur doit rester masqué avant la première création.");
 
-  const correctCell = page.locator('.pixel-grid button[aria-label*="Couleur cible 2"]').first();
+  const invalidRequest = await page.request.post(`${baseUrl}/api/generate-pattern`, {
+    data: { prompt: "x", style: "cute", detail: "classic" },
+  });
+  assert(invalidRequest.status() === 400, "La route IA doit refuser les descriptions invalides.");
+
+  await page.getByPlaceholder("Une banane souriante, un chat astronaute…").fill("Une banane souriante");
+  await page.getByRole("button", { name: "Créer mon pixel art" }).click();
+  await page.locator(".editor-card").waitFor();
+  await page.locator(".canvas-wrap > header").getByText("Banane souriante", { exact: true }).waitFor();
+  assert(await page.locator('.pixel-grid button[tabindex="0"]').count() === 1, "Une seule cellule doit être présente dans l’ordre de tabulation.");
+  assert(!(await page.getByRole("button", { name: "Pipette" }).isVisible()), "Les outils avancés doivent être masqués au départ.");
+
+  await page.locator(".palette .swatch").nth(2).click();
+  const correctCell = page.locator('.pixel-grid button[aria-label*="Couleur cible 3"]').first();
   await correctCell.click();
   await page.locator(".progress-label b").filter({ hasNotText: "0%" }).waitFor();
   await page.getByRole("button", { name: "Annuler" }).click();
@@ -63,18 +77,10 @@ try {
   await correctCell.click();
   assert((await correctCell.getAttribute("aria-label"))?.includes("vide"), "La gomme doit laisser une cellule vide.");
 
-  const invalidRequest = await page.request.post(`${baseUrl}/api/generate-pattern`, {
-    data: { prompt: "x", style: "cute", detail: "classic" },
-  });
-  assert(invalidRequest.status() === 400, "La route IA doit refuser les descriptions invalides.");
-
-  await page.getByPlaceholder("Une banane souriante, un chat astronaute…").fill("Une banane souriante");
-  await page.getByRole("button", { name: "Créer mon pixel art" }).click();
-  await page.getByText("Banane souriante", { exact: true }).waitFor();
-  assert(!(await page.getByRole("button", { name: "Pipette" }).isVisible()), "Les outils avancés doivent être masqués au départ.");
-
   await page.getByRole("tab", { name: "Une photo" }).click();
   await page.locator('input[type="file"]').setInputFiles(path.resolve("assets/assets_demo.png"));
+  await page.locator(".canvas-wrap > header").getByText("Banane souriante", { exact: true }).waitFor();
+  assert(await page.locator(".pixel-grid button").count() === 256, "Choisir une photo ne doit pas lancer la transformation avant validation.");
   await page.getByRole("button", { name: "Simple 12 × 12" }).click();
   await page.getByRole("button", { name: "Créer mon pixel art" }).click();
   await page.locator(".pixel-grid button").nth(143).waitFor();
@@ -82,6 +88,16 @@ try {
   assert(await page.locator(".palette .swatch").count() <= 8, "La palette générée doit respecter la limite demandée.");
 
   await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole("button", { name: "Plein écran" }).click();
+  await page.locator(".editor-card.editor-focus").waitFor();
+  await page.getByRole("button", { name: "Ajuster à l’écran" }).click();
+  const fittedGrid = await page.evaluate(() => {
+    const grid = document.querySelector(".pixel-grid")?.getBoundingClientRect();
+    const viewport = document.querySelector(".pixel-grid-viewport")?.getBoundingClientRect();
+    return Boolean(grid && viewport && grid.width <= viewport.width + 1 && grid.height <= viewport.height + 1);
+  });
+  assert(fittedGrid, "Ajuster à l’écran doit réellement contenir la grille sur mobile.");
+  await page.getByRole("button", { name: "Fermer le plein écran" }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   const layout = await page.evaluate(() => ({ documentWidth: document.documentElement.scrollWidth, viewportWidth: window.innerWidth }));
   assert(layout.documentWidth <= layout.viewportWidth + 1, "La page mobile ne doit pas déborder horizontalement.");
@@ -90,7 +106,14 @@ try {
   assert(browserErrors.length === 0, `Erreurs navigateur : ${browserErrors.join(" | ")}`);
   await page.screenshot({ path: "artifacts/mosaipix-mobile.png", fullPage: true });
 
-  console.log("Mosaipix: bilingual pixel-art creation, AI flow, image quantization, drawing and mobile layout passed.");
+  await page.waitForTimeout(600);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Reprendre" }).waitFor();
+  assert(await page.locator(".editor-card").count() === 0, "Un projet sauvegardé doit être proposé sans imposer immédiatement l’éditeur.");
+  await page.getByRole("button", { name: "Reprendre" }).click();
+  await page.locator(".editor-card").waitFor();
+
+  console.log("Mosaipix: progressive bilingual creation, saved-project resume, drawing and mobile full-screen layout passed.");
 } finally {
   await browser.close();
 }
