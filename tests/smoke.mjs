@@ -17,7 +17,16 @@ const bananaTargets = Array.from({ length: 16 * 16 }, (_, index) => {
   return 0;
 });
 
+let failPatternGeneration = false;
 await page.route("**/api/generate-pattern", async (route) => {
+  if (failPatternGeneration) {
+    await route.fulfill({
+      status: 502,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Le motif n’a pas pu être créé." }),
+    });
+    return;
+  }
   await route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -118,6 +127,14 @@ try {
   await page.getByRole("button", { name: "Gomme" }).click();
   await correctCell.click();
   assert((await correctCell.getAttribute("aria-label"))?.includes("vide"), "La gomme doit laisser une cellule vide.");
+
+  await page.getByRole("button", { name: "Modifier la source" }).click();
+  failPatternGeneration = true;
+  await page.getByPlaceholder("Une banane souriante, un chat astronaute…").fill("Un chat astronaute");
+  await page.getByRole("button", { name: "Créer mon pixel art" }).click();
+  await page.getByText("L’IA n’a pas trouvé un dessin assez lisible cette fois.", { exact: false }).waitFor();
+  assert(await page.locator(".free-image-results article").count() === 3, "Un échec IA doit proposer automatiquement trois images libres.");
+  failPatternGeneration = false;
 
   await page.getByRole("tab", { name: "Une photo" }).click();
   await page.locator('input[type="file"]').setInputFiles(path.resolve("assets/assets_demo.png"));
