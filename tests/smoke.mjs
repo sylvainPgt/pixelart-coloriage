@@ -34,6 +34,32 @@ await page.route("**/api/generate-pattern", async (route) => {
   });
 });
 
+await page.route("**/api/free-images/*", async (route) => {
+  await route.fulfill({
+    status: 200,
+    contentType: "image/png",
+    path: path.resolve("assets/assets_demo.png"),
+  });
+});
+
+await page.route("**/api/free-images", async (route) => {
+  const images = Array.from({ length: 3 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-00000000000${index}`,
+    title: `Chat astronaute ${index + 1}`,
+    creator: "Artiste de test",
+    attribution: "Image de test",
+    license: "CC BY",
+    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    sourceUrl: "https://openverse.org/",
+    previewUrl: `/api/free-images/00000000-0000-4000-8000-00000000000${index}`,
+  }));
+  await route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ images }),
+  });
+});
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -66,6 +92,15 @@ try {
   });
   assert(invalidRequest.status() === 400, "La route IA doit refuser les descriptions invalides.");
 
+  await page.getByPlaceholder("Une banane souriante, un chat astronaute…").fill("Un chat astronaute");
+  await page.getByRole("button", { name: "Voir 3 images libres" }).click();
+  await page.locator(".free-image-results article").nth(2).waitFor();
+  assert(await page.locator(".free-image-results article").count() === 3, "La recherche libre doit proposer exactement trois images.");
+  await page.locator(".free-image-results").screenshot({ path: "artifacts/mosaipix-free-images.png" });
+  await page.getByRole("button", { name: "Utiliser Chat astronaute 1" }).click();
+  await page.locator(".selected-image-credit").waitFor();
+  assert(await page.getByRole("tab", { name: "Une photo" }).getAttribute("aria-selected") === "true", "Choisir une image libre doit ouvrir les réglages photo.");
+  await page.getByRole("tab", { name: "Une idée" }).click();
   await page.getByPlaceholder("Une banane souriante, un chat astronaute…").fill("Une banane souriante");
   await page.getByRole("button", { name: "Créer mon pixel art" }).click();
   await page.locator(".editor-card").waitFor();
