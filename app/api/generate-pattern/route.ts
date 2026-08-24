@@ -70,7 +70,9 @@ export async function POST(request: Request) {
   const patternSchema = z.object({
     name: z.string().trim().min(1).max(48),
     palette: z.array(z.string().regex(/^#[0-9a-f]{6}$/i)).length(6),
-    rows: z.array(z.string().regex(rowPattern)).length(size),
+    // Some models obey the row width but occasionally return more rows than
+    // requested. We resample vertically below rather than discard a valid motif.
+    rows: z.array(z.string().regex(rowPattern)).min(1).max(32),
   });
 
   const styleInstruction = {
@@ -123,9 +125,17 @@ Style demandé : ${styleInstruction}.${attempt === 1 ? " Ta première propositio
 
     if (!output) throw new Error("The model returned an empty pixel-art grid.");
 
-    const targets = output.rows.flatMap((row) =>
-      [...row].map((character) => Number(character)),
-    );
+    const targets = Array.from({ length: size }, (_, targetY) => {
+      const sourceY = Math.min(
+        output.rows.length - 1,
+        Math.floor((targetY * output.rows.length) / size),
+      );
+      return [...output.rows[sourceY]].map((character) => Number(character));
+    }).flat();
+    const renderedForegroundCells = targets.filter((cell) => cell !== 0).length;
+    if (renderedForegroundCells < minimumForegroundCells) {
+      throw new Error("The model returned an empty pixel-art grid after resizing.");
+    }
     const project: PixelProject = {
       version: 2,
       name: output.name,
