@@ -66,14 +66,11 @@ export async function POST(request: Request) {
 
   const { prompt, style, detail } = parsed.data;
   const size = DETAIL_SIZES[detail];
-  const minimumForegroundCells = Math.ceil(size * size * 0.25);
-  const maximumForegroundCells = Math.floor(size * size * 0.65);
-  const coordinatePart = Array.from({ length: size }, (_, index) => String(index)).join("|");
-  const pixelPattern = new RegExp(`^(?:${coordinatePart}),(?:${coordinatePart}),[1-5]$`);
+  const rowPattern = new RegExp(`^[0-5]{${size}}$`);
   const patternSchema = z.object({
     name: z.string().trim().min(1).max(48),
     palette: z.array(z.string().regex(/^#[0-9a-f]{6}$/i)).length(6),
-    pixels: z.array(z.string().regex(pixelPattern)).min(minimumForegroundCells).max(maximumForegroundCells),
+    rows: z.array(z.string().regex(rowPattern)).length(size),
   });
 
   const styleInstruction = {
@@ -83,6 +80,7 @@ export async function POST(request: Request) {
   }[style];
 
   try {
+    const minimumForegroundCells = Math.ceil(size * size * 0.25);
     let output: z.infer<typeof patternSchema> | undefined;
 
     // Some small models occasionally comply with the JSON schema but choose an
@@ -104,31 +102,30 @@ export async function POST(request: Request) {
         system: `Tu es un pixel artist spécialisé dans les petits modèles à colorier.
 Crée une silhouette immédiatement reconnaissable à taille miniature.
 La palette contient exactement 6 couleurs hexadécimales. L'index 0 est le fond.
-La liste pixels contient des coordonnées uniques au format "x,y,c" : x et y vont de 0 à ${size - 1}, c va de 1 à 5.
+Chaque ligne contient exactement ${size} chiffres de 0 à 5, sans espace.
 Le sujet doit être centré, occuper entre 25 % et 65 % de la grille et rester entouré de fond.
-Tu dois dessiner un vrai sujet : fournis entre ${minimumForegroundCells} et ${maximumForegroundCells} coordonnées distinctes. Ne renvoie jamais une liste vide ou dupliquée.
+Tu dois dessiner un vrai sujet : il faut au moins ${minimumForegroundCells} cases non nulles. Ne renvoie jamais une grille vide.
 Utilise de grands aplats cohérents, des contours nets et évite le bruit pixel par pixel.
 Ne dessine aucun texte, lettre, chiffre, cadre ou signature.
 Pour les objets connus, respecte leur silhouette caractéristique et leurs couleurs habituelles.
-Style demandé : ${styleInstruction}.${attempt === 1 ? " Ta première proposition a été refusée : donne maintenant assez de coordonnées différentes pour former le sujet demandé." : ""}`,
-        prompt: `Dessine en pixel art : ${prompt}. Construis directement le motif dans la liste de coordonnées, pas une description.`,
+Style demandé : ${styleInstruction}.${attempt === 1 ? " Ta première proposition a été refusée car elle était vide : cette fois, remplis impérativement au moins le quart de la grille avec le sujet demandé." : ""}`,
+        prompt: `Dessine en pixel art : ${prompt}. Construis directement le motif dans les lignes indexées, pas une description.`,
       });
 
-      const uniquePixels = new Set(
-        result.output.pixels.map((pixel) => pixel.split(",").slice(0, 2).join(",")),
-      );
-      if (uniquePixels.size >= minimumForegroundCells) {
+      const foregroundCells = result.output.rows
+        .join("")
+        .split("")
+        .filter((cell) => cell !== "0").length;
+      if (foregroundCells >= minimumForegroundCells) {
         output = result.output;
       }
     }
 
     if (!output) throw new Error("The model returned an empty pixel-art grid.");
 
-    const targets = Array<number>(size * size).fill(0);
-    for (const pixel of output.pixels) {
-      const [x, y, color] = pixel.split(",").map(Number);
-      targets[y * size + x] = color;
-    }
+    const targets = output.rows.flatMap((row) =>
+      [...row].map((character) => Number(character)),
+    );
     const project: PixelProject = {
       version: 2,
       name: output.name,
