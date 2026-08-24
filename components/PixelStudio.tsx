@@ -18,6 +18,7 @@ type CropMode = "cover" | "contain";
 type IdeaStyle = "cute" | "retro" | "minimal";
 type IdeaDetail = "simple" | "classic" | "detailed";
 type Locale = "fr" | "en";
+type CreationSource = "text" | "image" | "template" | "saved";
 type PaintLayer = Array<number | null>;
 type ImageSettings = {
   width: number;
@@ -74,8 +75,8 @@ const COLOR_SETS = {
 };
 
 const DEFAULT_IMAGE_SETTINGS: ImageSettings = {
-  width: 20,
-  height: 20,
+  width: 16,
+  height: 16,
   paletteSize: 8,
   cropMode: "cover",
   focusX: 50,
@@ -255,7 +256,15 @@ export default function PixelStudio() {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [resetPending, setResetPending] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [hasActiveProject, setHasActiveProject] = useState(false);
+  const [resumeAvailable, setResumeAvailable] = useState(false);
+  const [shouldPersistProject, setShouldPersistProject] = useState(false);
+  const [creationSource, setCreationSource] = useState<CreationSource | null>(null);
+  const [editorExpanded, setEditorExpanded] = useState(false);
+  const [focusedCell, setFocusedCell] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const promptRef = useRef<HTMLInputElement>(null);
+  const gridViewportRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef(false);
 
   useEffect(() => {
@@ -273,12 +282,9 @@ export default function PixelStudio() {
           setProject(data.project);
           setPainted(data.painted);
           setSelected(Math.min(1, data.project.palette.length - 1));
-          setImageSettings((current) => ({
-            ...current,
-            width: data.project.width,
-            height: data.project.height,
-            paletteSize: data.project.palette.length,
-          }));
+          setResumeAvailable(true);
+          setShouldPersistProject(true);
+          setCreationSource("saved");
         }
       }
     } catch {
@@ -289,6 +295,11 @@ export default function PixelStudio() {
     }
   }, []);
 
+  useEffect(() => {
+    document.body.classList.toggle("editor-expanded", editorExpanded);
+    return () => document.body.classList.remove("editor-expanded");
+  }, [editorExpanded]);
+
   function changeLocale(nextLocale: Locale) {
     setLocale(nextLocale);
     document.documentElement.lang = nextLocale;
@@ -296,7 +307,7 @@ export default function PixelStudio() {
   }
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !shouldPersistProject) return;
     const timeout = window.setTimeout(() => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ project, painted }));
@@ -305,12 +316,12 @@ export default function PixelStudio() {
       }
     }, 450);
     return () => window.clearTimeout(timeout);
-  }, [hydrated, painted, project]);
+  }, [hydrated, painted, project, shouldPersistProject]);
 
   const filled = painted.reduce<number>((total, value) => total + (value === null ? 0 : 1), 0);
   const correct = painted.reduce<number>((total, value, index) => total + (value === project.targets[index] ? 1 : 0), 0);
   const progress = correct === 0 ? 0 : Math.max(1, Math.round(correct / project.targets.length * 100));
-  const cellSize = Math.max(24, Math.round(32 * zoom / 100));
+  const cellSize = Math.max(10, Math.round(32 * zoom / 100));
   const cursorCoordinates = hoveredIndex === null
     ? locale === "fr" ? "Survole une case" : "Hover over a cell"
     : locale === "fr"
@@ -322,18 +333,24 @@ export default function PixelStudio() {
     setRedoStack([]);
   }
 
-  function loadProject(next: PixelProject) {
+  function revealEditor() {
+    window.requestAnimationFrame(() => {
+      document.querySelector(".editor-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function loadProject(next: PixelProject, source: CreationSource) {
     setProject(next);
     setPainted(Array(next.targets.length).fill(null));
     setSelected(Math.min(1, next.palette.length - 1));
-    setImageSettings((current) => ({
-      ...current,
-      width: next.width,
-      height: next.height,
-      paletteSize: next.palette.length,
-    }));
+    setFocusedCell(0);
     clearHistory();
     setResetPending(false);
+    setResumeAvailable(false);
+    setHasActiveProject(true);
+    setShouldPersistProject(true);
+    setCreationSource(source);
+    revealEditor();
   }
 
   function snapshot(layer = painted) {
@@ -430,10 +447,7 @@ export default function PixelStudio() {
       if (!response.ok || !validateGeneratedProject(result.project)) {
         throw new Error(typeof result.error === "string" ? result.error : locale === "fr" ? "Le motif reçu est incomplet." : "The generated pattern is incomplete.");
       }
-      loadProject(result.project);
-      window.requestAnimationFrame(() => {
-        document.querySelector(".editor-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+      loadProject(result.project, "text");
     } catch (error) {
       setIdeaError(error instanceof Error ? error.message : locale === "fr" ? "La création a échoué. Réessaie." : "Generation failed. Please try again.");
     } finally {
@@ -496,7 +510,7 @@ export default function PixelStudio() {
         height: settings.height,
         palette: quantized.palette,
         targets: quantized.indices,
-      });
+      }, "image");
     } catch (error) {
       setImageError(error instanceof Error ? error.message : locale === "fr" ? "La génération a échoué." : "Generation failed.");
     } finally {
@@ -514,7 +528,7 @@ export default function PixelStudio() {
       const cleanName = file.name.replace(/\.[^.]+$/, "") || "image";
       setSourceDataUrl(reader.result);
       setSourceName(cleanName);
-      void generateFromImage(reader.result, cleanName);
+      setImageError("");
     };
     reader.readAsDataURL(file);
     event.target.value = "";
@@ -583,8 +597,42 @@ export default function PixelStudio() {
   }
 
   function fitGrid() {
-    const longestSide = Math.max(project.width, project.height);
-    setZoom(Math.max(50, Math.min(150, Math.floor(560 / (longestSide * 32) * 100))));
+    const viewport = gridViewportRef.current;
+    if (!viewport) return;
+    const gap = showGrid ? 1 : 0;
+    const availableWidth = Math.max(100, viewport.clientWidth - 18 - (project.width - 1) * gap);
+    const availableHeight = Math.max(100, viewport.clientHeight - 18 - (project.height - 1) * gap);
+    const targetCell = Math.max(10, Math.floor(Math.min(availableWidth / project.width, availableHeight / project.height)));
+    setZoom(Math.max(25, Math.min(200, Math.round(targetCell / 32 * 100))));
+  }
+
+  function changeZoom(delta: number) {
+    setZoom((current) => Math.max(25, Math.min(200, current + delta)));
+  }
+
+  function editCreationSource() {
+    setEditorExpanded(false);
+    document.getElementById("studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (creationSource === "text") {
+      setMode("text");
+      window.setTimeout(() => promptRef.current?.focus(), 450);
+    } else if (creationSource === "image") {
+      setMode("image");
+    }
+  }
+
+  function handleGridKeys(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let next = index;
+    if (event.key === "ArrowLeft") next = Math.max(0, index - 1);
+    else if (event.key === "ArrowRight") next = Math.min(project.targets.length - 1, index + 1);
+    else if (event.key === "ArrowUp") next = Math.max(0, index - project.width);
+    else if (event.key === "ArrowDown") next = Math.min(project.targets.length - 1, index + project.width);
+    else if (event.key === "Home") next = Math.floor(index / project.width) * project.width;
+    else if (event.key === "End") next = Math.min(project.targets.length - 1, Math.floor(index / project.width) * project.width + project.width - 1);
+    else return;
+    event.preventDefault();
+    setFocusedCell(next);
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-index="${next}"]`)?.focus());
   }
 
   function handleModeKeys(event: KeyboardEvent<HTMLDivElement>) {
@@ -645,6 +693,7 @@ export default function PixelStudio() {
 
   return (
     <main onPointerUp={() => { drawingRef.current = false; }} onPointerLeave={() => { drawingRef.current = false; }}>
+      <a className="skip-link" href="#studio">{tr("Aller au studio", "Skip to studio")}</a>
       <nav className="nav shell" aria-label={tr("Navigation principale", "Main navigation")}>
         <a className="brand" href="#top"><Brand /></a>
         <div className="nav-links">
@@ -676,6 +725,12 @@ export default function PixelStudio() {
       <section className="studio-section" id="studio"><div className="shell">
         <div className="section-heading"><span className="eyebrow">{tr("LE STUDIO PIXEL ART", "THE PIXEL ART STUDIO")}</span><h2>{tr("Que veux-tu créer ?", "What do you want to create?")}</h2><p>{tr("Choisis un point de départ. Mosaipix construit une vraie grille de pixels, avec des réglages fins disponibles si tu en as besoin.", "Choose a starting point. Mosaipix builds a true pixel grid, with fine controls available whenever you need them.")}</p></div>
 
+        {resumeAvailable && !hasActiveProject ? <div className="resume-card">
+          <PixelMiniature project={project} className="resume-preview" label={tr(`Aperçu de ${projectName}`, `Preview of ${projectName}`)} />
+          <div><span className="eyebrow">{tr("PROJET SAUVEGARDÉ", "SAVED PROJECT")}</span><h3>{projectName}</h3><p>{project.width} × {project.height} · {project.palette.length} {tr("couleurs", "colors")}</p></div>
+          <div className="resume-actions"><button className="primary compact" onClick={() => { setHasActiveProject(true); setCreationSource("saved"); revealEditor(); }}>{tr("Reprendre", "Resume")}</button><button className="quiet-button" onClick={() => setResumeAvailable(false)}>{tr("Créer autre chose", "Create something else")}</button></div>
+        </div> : null}
+
         <div className="mode-tabs" role="tablist" aria-label={tr("Point de départ", "Starting point")} onKeyDown={handleModeKeys}>
           {modeOptions.map(([value, label]) => (
             <button key={value} id={`mode-${value}`} role="tab" aria-selected={mode === value} aria-controls={`panel-${value}`} tabIndex={mode === value ? 0 : -1} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>{label}</button>
@@ -684,7 +739,7 @@ export default function PixelStudio() {
 
         <div className="source-panel" id={`panel-${mode}`} role="tabpanel" aria-labelledby={`mode-${mode}`}>
           {mode === "templates" ? <div className="template-list">{templates.map((item) => (
-            <button key={item.name} className={project.name === item.name ? "template active" : "template"} onClick={() => loadProject(item)}>
+            <button key={item.name} className={hasActiveProject && project.name === item.name ? "template active" : "template"} onClick={() => loadProject(item, "template")}>
               <PixelMiniature project={item} className="template-preview"/><span><b>{isFrench ? item.name : ({ "Fusée cosmique": "Cosmic rocket", "Fleur solaire": "Sunny flower", "Lac au crépuscule": "Twilight lake" }[item.name] ?? item.name)}</b><small>{item.width} × {item.height} · {item.palette.length} {tr("couleurs", "colors")}</small></span>
             </button>
           ))}</div> : null}
@@ -694,7 +749,7 @@ export default function PixelStudio() {
               <div className={`image-preview ${sourceDataUrl ? "has-image" : ""}`} style={sourceDataUrl ? { backgroundImage: `url(${sourceDataUrl})`, backgroundSize: imageSettings.cropMode, backgroundPosition: `${imageSettings.focusX}% ${imageSettings.focusY}%`, aspectRatio: `${imageSettings.width} / ${imageSettings.height}`, backgroundColor: imageSettings.background } : undefined} aria-label={sourceDataUrl ? tr(`Aperçu du cadrage de ${sourceName}`, `Crop preview for ${sourceName}`) : tr("Aucune image sélectionnée", "No image selected")} role="img">{sourceDataUrl ? null : <span>{tr("Ta photo apparaîtra ici", "Your photo will appear here")}<br/><small>PNG, JPG {tr("ou", "or")} WebP</small></span>}</div>
               <button className="primary compact" onClick={() => fileRef.current?.click()}>{sourceDataUrl ? tr("Changer de photo", "Change photo") : tr("Choisir une photo", "Choose a photo")}</button>
               <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={importImage}/>
-              <p>{tr("Ta photo reste dans ce navigateur et n’est jamais envoyée.", "Your photo stays in this browser and is never uploaded.")}</p>
+              <p>{tr("Ta photo reste dans ce navigateur et n’est jamais envoyée. Choisis-la, règle le rendu, puis crée ton pixel art.", "Your photo stays in this browser and is never uploaded. Choose it, adjust the look, then create your pixel art.")}</p>
             </div>
             <div className="image-controls simple-panel">
               <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices">{[[12, tr("Simple", "Simple")], [16, tr("Classique", "Classic")], [24, tr("Détaillé", "Detailed")]].map(([size, label]) => <button type="button" key={size} className={imageSettings.width === size && imageSettings.height === size ? "active" : ""} aria-pressed={imageSettings.width === size && imageSettings.height === size} onClick={() => setImageSettings((current) => ({ ...current, width: Number(size), height: Number(size) }))}><b>{label}</b><small>{size} × {size}</small></button>)}</div></fieldset>
@@ -713,18 +768,18 @@ export default function PixelStudio() {
           </div> : null}
 
           {mode === "text" ? <form className="idea-panel" onSubmit={(event) => { event.preventDefault(); void generateIdea(); }}>
-            <div className="idea-intro"><span className="idea-spark">✦</span><div><h3>{tr("Décris simplement ton idée", "Simply describe your idea")}</h3><p>{tr("Une IA légère créera une grille unique et reconnaissable à colorier.", "A lightweight AI will create a unique, recognizable pixel grid to color.")}</p></div></div>
-            <label className="idea-prompt"><span>{tr("Ton idée", "Your idea")}</span><input value={prompt} onChange={(event) => setPrompt(event.target.value)} required minLength={2} maxLength={80} placeholder={tr("Une banane souriante, un chat astronaute…", "A smiling banana, an astronaut cat…")}/></label>
+            <div className="idea-intro"><span className="idea-spark">✦</span><div><h3>{tr("Décris simplement ton idée", "Simply describe your idea")}</h3><p>{tr("Mosaipix dessinera une première version unique en quelques secondes.", "Mosaipix will draw a unique first version in a few seconds.")}</p></div></div>
+            <label className="idea-prompt"><span>{tr("Ton idée", "Your idea")}</span><input ref={promptRef} value={prompt} onChange={(event) => setPrompt(event.target.value)} required minLength={2} maxLength={80} placeholder={tr("Une banane souriante, un chat astronaute…", "A smiling banana, an astronaut cat…")}/></label>
             <div className="prompt-suggestions" aria-label={tr("Exemples d’idées", "Example ideas")}>{(isFrench ? ["Une banane souriante", "Un chat astronaute", "Une petite maison fleurie"] : ["A smiling banana", "An astronaut cat", "A tiny flower-covered house"]).map((suggestion) => <button type="button" key={suggestion} onClick={() => setPrompt(suggestion)}>{suggestion}</button>)}</div>
             <fieldset className="choice-field"><legend>{tr("Ambiance", "Style")}</legend><div className="choice-cards">{ideaStyles.map(([value, label, description]) => <button type="button" key={value} className={ideaStyle === value ? "active" : ""} aria-pressed={ideaStyle === value} onClick={() => setIdeaStyle(value)}><b>{label}</b><small>{description}</small></button>)}</div></fieldset>
             <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices">{ideaDetails.map(([value, label, dimensions]) => <button type="button" key={value} className={ideaDetail === value ? "active" : ""} aria-pressed={ideaDetail === value} onClick={() => setIdeaDetail(value)}><b>{label}</b><small>{dimensions}</small></button>)}</div></fieldset>
             <button className="primary idea-generate" disabled={generatingIdea}>{generatingIdea ? tr("Mosaipix dessine ton idée…", "Mosaipix is drawing your idea…") : tr("Créer mon pixel art", "Create my pixel art")}<span aria-hidden="true">→</span></button>
-            <p className="ai-note">{tr("Ta description est envoyée au modèle IA, jamais tes photos. Maximum 5 créations par heure.", "Your description is sent to the AI model, never your photos. Up to 5 creations per hour.")}</p>
+            <p className="ai-note">{tr("Ta description est envoyée au modèle IA, jamais tes photos. La création peut prendre quelques secondes.", "Your description is sent to the AI model, never your photos. Generation may take a few seconds.")}</p>
             {ideaError ? <p className="form-error" role="alert">{ideaError}</p> : null}
           </form> : null}
         </div>
 
-        <div className="editor-card">
+        {hasActiveProject ? <div id="editor" className={`editor-card ${editorExpanded ? "editor-focus" : ""}`}>
           <aside className="tools" aria-label={tr("Outils de dessin", "Drawing tools")}>
             <div><span className="label">{tr("DESSINER", "DRAW")}</span><div className="drawing-tools primary-tools">{primaryTools.map(([value, icon, label]) => <button key={value} className={tool === value ? "active" : ""} aria-pressed={tool === value} onClick={() => setTool(value)}><span>{icon}</span>{label}</button>)}</div><details className="secondary-tools"><summary>{tr("Plus d’outils", "More tools")}</summary><div className="drawing-tools">{advancedTools.map(([value, icon, label]) => <button key={value} className={tool === value ? "active" : ""} aria-pressed={tool === value} onClick={() => setTool(value)}><span>{icon}</span>{label}</button>)}</div></details></div>
             <div><span className="label">{tr("CHOISIS UNE COULEUR", "CHOOSE A COLOR")}</span><div className="palette">{project.palette.map((color, index) => <button key={`${index}-${color}`} className={selected === index ? "swatch selected" : "swatch"} style={{ background: color }} aria-label={`${tr("Couleur", "Color")} ${index + 1}, ${color}`} aria-pressed={selected === index} onClick={() => { setSelected(index); setTool("pencil"); }}><span>{index + 1}</span></button>)}</div><details className="palette-settings"><summary>{tr("Modifier cette couleur", "Edit this color")}</summary><label className="color-editor">{tr("Couleur", "Color")} {selected + 1}<input type="color" value={project.palette[selected]} onChange={(event) => changePaletteColor(event.target.value)}/></label></details></div>
@@ -735,9 +790,20 @@ export default function PixelStudio() {
           </aside>
 
           <section className="canvas-wrap"><header><div><span className="status-dot"/> {progress === 100 ? tr("TERMINÉ", "DONE") : tr("EN COURS", "IN PROGRESS")}</div><b>{projectName}</b><span>{project.width} × {project.height}</span></header>
-            <div className="canvas-quick-actions"><button onClick={fitGrid}>{tr("Ajuster à l’écran", "Fit to screen")}</button><details className="view-settings"><summary>{tr("Affichage", "View")}</summary><div className="view-controls"><label>Zoom <input type="range" min="50" max="200" step="10" value={zoom} onChange={(event) => setZoom(Number(event.target.value))}/><b>{zoom}%</b></label><label>{tr("Aide", "Guide")} <input type="range" min="0" max="100" step="5" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))}/><b>{referenceOpacity}%</b></label><label className="toggle"><input type="checkbox" checked={showNumbers} onChange={(event) => setShowNumbers(event.target.checked)}/> {tr("Numéros", "Numbers")}</label><label className="toggle"><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)}/> {tr("Traits", "Grid lines")}</label></div></details></div>
+            <div className="editor-creation-actions">
+              {creationSource === "text" && prompt.trim() ? <button disabled={generatingIdea} onClick={() => void generateIdea()}>↻ {generatingIdea ? tr("Création…", "Creating…") : tr("Nouvelle variante", "New variation")}</button> : null}
+              {creationSource === "image" && sourceDataUrl ? <button disabled={processing} onClick={() => void generateFromImage(sourceDataUrl, sourceName)}>↻ {processing ? tr("Création…", "Creating…") : tr("Recréer avec ces réglages", "Recreate with these settings")}</button> : null}
+              {creationSource === "text" || creationSource === "image" ? <button onClick={editCreationSource}>✎ {tr("Modifier la source", "Edit source")}</button> : null}
+            </div>
+            <div className="mobile-editor-bar" aria-label={tr("Outils rapides", "Quick tools")}>
+              <button className={tool === "pencil" ? "active" : ""} aria-pressed={tool === "pencil"} onClick={() => setTool("pencil")}>✎ <span>{tr("Crayon", "Pencil")}</span></button>
+              <button className={tool === "eraser" ? "active" : ""} aria-pressed={tool === "eraser"} onClick={() => setTool("eraser")}>◇ <span>{tr("Gomme", "Eraser")}</span></button>
+              <div className="mobile-palette">{project.palette.map((color, index) => <button key={`mobile-${index}-${color}`} className={selected === index ? "selected" : ""} style={{ background: color }} aria-label={`${tr("Couleur", "Color")} ${index + 1}`} aria-pressed={selected === index} onClick={() => { setSelected(index); setTool("pencil"); }}>{index + 1}</button>)}</div>
+              <button disabled={undoStack.length === 0} onClick={undo}>↶ <span>{tr("Annuler", "Undo")}</span></button>
+            </div>
+            <div className="canvas-quick-actions"><button onClick={fitGrid}>{tr("Ajuster à l’écran", "Fit to screen")}</button><button className="expand-editor" onClick={() => setEditorExpanded((current) => !current)}>{editorExpanded ? tr("Fermer le plein écran", "Exit full screen") : tr("Plein écran", "Full screen")}</button><details className="view-settings"><summary>{tr("Affichage", "View")}</summary><div className="view-controls"><div className="zoom-buttons"><button aria-label={tr("Réduire le zoom", "Zoom out")} onClick={() => changeZoom(-10)}>−</button><b>{zoom}%</b><button aria-label={tr("Augmenter le zoom", "Zoom in")} onClick={() => changeZoom(10)}>+</button></div><label>Zoom <input type="range" min="25" max="200" step="5" value={zoom} onChange={(event) => setZoom(Number(event.target.value))}/><b>{zoom}%</b></label><label>{tr("Aide", "Guide")} <input type="range" min="0" max="100" step="5" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))}/><b>{referenceOpacity}%</b></label><label className="toggle"><input type="checkbox" checked={showNumbers} onChange={(event) => setShowNumbers(event.target.checked)}/> {tr("Numéros", "Numbers")}</label><label className="toggle"><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)}/> {tr("Traits", "Grid lines")}</label></div></details></div>
             <div className="coordinate-bar" aria-live="polite">{cursorCoordinates}<span>{tr("Fais défiler pour explorer les grandes grilles.", "Scroll to explore larger grids.")}</span></div>
-            <div className="pixel-grid-viewport"><div className={`pixel-grid ${showGrid ? "with-grid" : "without-grid"}`} style={gridStyle} onPointerMove={handlePointerMove} onPointerLeave={() => { drawingRef.current = false; setHoveredIndex(null); }}>
+            <div ref={gridViewportRef} className="pixel-grid-viewport"><div className={`pixel-grid ${showGrid ? "with-grid" : "without-grid"}`} style={gridStyle} role="grid" aria-label={tr("Grille de coloriage", "Coloring grid")} aria-rowcount={project.height} aria-colcount={project.width} onPointerMove={handlePointerMove} onPointerLeave={() => { drawingRef.current = false; setHoveredIndex(null); }}>
               {project.targets.map((target, index) => {
                 const paintedIndex = painted[index];
                 const correctCell = paintedIndex === target;
@@ -746,11 +812,11 @@ export default function PixelStudio() {
                 const cellLabel = isFrench
                   ? `Colonne ${x}, ligne ${y}. Couleur cible ${target + 1}${paintedIndex === null ? ", vide" : correctCell ? ", correcte" : ", incorrecte"}`
                   : `Column ${x}, row ${y}. Target color ${target + 1}${paintedIndex === null ? ", empty" : correctCell ? ", correct" : ", incorrect"}`;
-                return <button key={index} data-index={index} className={correctCell ? "correct" : paintedIndex === null ? "empty" : "incorrect"} aria-label={cellLabel} onPointerDown={(event) => handlePointerDown(event, index)} onPointerEnter={() => setHoveredIndex(index)} style={{ background: paintedIndex === null ? "#ffffff" : project.palette[paintedIndex] }}><span className="cell-hint" style={{ background: project.palette[target] }}>{showNumbers ? target + 1 : ""}</span></button>;
+                return <button key={index} data-index={index} role="gridcell" tabIndex={focusedCell === index ? 0 : -1} className={correctCell ? "correct" : paintedIndex === null ? "empty" : "incorrect"} aria-label={cellLabel} onKeyDown={(event) => handleGridKeys(event, index)} onFocus={() => setFocusedCell(index)} onPointerDown={(event) => handlePointerDown(event, index)} onPointerEnter={() => setHoveredIndex(index)} style={{ background: paintedIndex === null ? "#ffffff" : project.palette[paintedIndex] }}><span className="cell-hint" style={{ "--pixel-color": project.palette[target] } as CSSProperties}>{showNumbers ? target + 1 : ""}</span></button>;
               })}
             </div></div>
           </section>
-        </div>
+        </div> : null}
       </div></section>
 
       <section className="how shell" id="how"><div className="section-heading"><span className="eyebrow">{tr("AUSSI SIMPLE QUE ÇA", "IT'S THAT SIMPLE")}</span><h2>{tr("Imagine, crée, colorie", "Imagine, create, color")}</h2></div><div className="steps"><article><span>01</span><i>✦</i><h3>{tr("Imagine", "Imagine")}</h3><p>{tr("Décris une idée, choisis une photo ou pars d’un modèle.", "Describe an idea, choose a photo, or start from a template.")}</p></article><article><span>02</span><i>▦</i><h3>{tr("Découvre", "Discover")}</h3><p>{tr("Mosaipix prépare automatiquement une grille pixel art et une palette claires.", "Mosaipix automatically builds a clear pixel-art grid and palette.")}</p></article><article><span>03</span><i>✎</i><h3>{tr("Colorie", "Color")}</h3><p>{tr("Suis les numéros, personnalise les couleurs et garde ta création.", "Follow the numbers, customize the colors, and save your creation.")}</p></article></div></section>
