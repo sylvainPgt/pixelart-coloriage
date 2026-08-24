@@ -26,7 +26,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .shell { width: min(1180px, calc(100% - 40px)); margin-inline: auto; }
 .nav { height: 84px; display: flex; align-items: center; justify-content: space-between; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: 20px; font-weight: 800; text-decoration: none; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; }
 .brand-mark {
   display: grid;
   place-items: center;
@@ -36,11 +36,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   background: var(--purple);
   border-radius: 10px;
   box-shadow: inset -5px -5px #0002;
-  font-family: var(--font-display), serif;
 }
+.brand-mark svg { width: 24px; height: 24px; fill: white; }
+.brand-lockup { display: grid; gap: 1px; line-height: 1; }
+.brand-lockup b { font-size: 20px; letter-spacing: -.025em; }
+.brand-lockup small { color: var(--purple); font-size: 8px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
 .nav-links { display: flex; align-items: center; gap: 30px; }
 .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 700; }
 .badge { padding: 8px 13px; background: #eef8e9; color: #327536; border-radius: 999px; font-size: 12px; font-weight: 800; }
+.language-switch { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--cream); }
+.language-switch button { min-width: 34px; min-height: 28px; padding: 4px 7px; border: 0; border-radius: 6px; color: var(--muted); background: transparent; font-size: 10px; font-weight: 900; cursor: pointer; }
+.language-switch button.active { color: white; background: var(--ink); }
 
 .hero { min-height: 620px; display: grid; grid-template-columns: 1.05fr .95fr; align-items: center; gap: 64px; padding-bottom: 68px; }
 .eyebrow { display: inline-flex; color: var(--purple); font-size: 12px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
@@ -324,6 +330,7 @@ footer .shell { display: flex; align-items: center; justify-content: space-betwe
 
 @media (max-width: 900px) {
   .nav-links a { display: none; }
+  .nav-links { gap: 12px; }
   .hero { grid-template-columns: 1fr; gap: 35px; padding-top: 48px; text-align: center; }
   .hero-copy > p { margin-inline: auto; }
   .hero-art { width: min(620px, 100%); min-height: 420px; margin: auto; }

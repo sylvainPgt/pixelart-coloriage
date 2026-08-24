@@ -42,11 +42,15 @@ try {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
   await page.locator("main").waitFor();
   mkdirSync("artifacts", { recursive: true });
-  await page.screenshot({ path: "artifacts/pixelia-desktop.png", fullPage: false });
-  await page.locator(".idea-panel").screenshot({ path: "artifacts/pixelia-idea-panel.png" });
+  await page.screenshot({ path: "artifacts/mosaipix-desktop.png", fullPage: false });
+  await page.locator(".idea-panel").screenshot({ path: "artifacts/mosaipix-idea-panel.png" });
 
   assert(await page.locator(".hero-pixel-grid > span").count() === 256, "Le héros doit être un vrai motif 16 × 16.");
   assert(await page.locator(".pixel-heart").count() === 0, "L’ancien cœur vectoriel ne doit plus exister.");
+  await page.getByRole("button", { name: "EN", exact: true }).click();
+  await page.getByRole("heading", { name: "What do you want to create?" }).waitFor();
+  assert(await page.locator("html").getAttribute("lang") === "en", "Le sélecteur anglais doit mettre à jour la langue du document.");
+  await page.getByRole("button", { name: "FR", exact: true }).click();
   await page.getByRole("tab", { name: "Une idée" }).waitFor();
 
   const correctCell = page.locator('.pixel-grid button[aria-label*="Couleur cible 2"]').first();
@@ -84,9 +88,9 @@ try {
   const hasErrorOverlay = await page.evaluate(() => Boolean(document.querySelector("[data-nextjs-dialog], .vite-error-overlay")));
   assert(!hasErrorOverlay, "Aucune erreur applicative ne doit recouvrir la page.");
   assert(browserErrors.length === 0, `Erreurs navigateur : ${browserErrors.join(" | ")}`);
-  await page.screenshot({ path: "artifacts/pixelia-mobile.png", fullPage: true });
+  await page.screenshot({ path: "artifacts/mosaipix-mobile.png", fullPage: true });
 
-  console.log("Pixelia: simplified creation, validated AI flow, image quantization, drawing and mobile layout passed.");
+  console.log("Mosaipix: bilingual pixel-art creation, AI flow, image quantization, drawing and mobile layout passed.");
 } finally {
   await browser.close();
 }

@@ -15,8 +15,8 @@ const display = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Pixelia — Crée et colorie ton pixel art",
-  description: "Transforme une photo ou une idée en pixel art et colorie-la directement en ligne.",
+  title: "Mosaipix — Pixel Art Studio",
+  description: "Turn a photo or an idea into real pixel art, then color and customize it online.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
