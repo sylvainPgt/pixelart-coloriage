@@ -688,7 +688,7 @@ export default function PixelStudio() {
     }));
   }
 
-  function exportPng(exportMode: "current" | "complete" | "printable") {
+  function createExportDataUrl(exportMode: "current" | "complete" | "printable") {
     // A brand-new coloring has no painted cells. Export the generated model in
     // that case so the primary download can never produce a blank white image.
     const resolvedMode = exportMode === "current" && filled === 0 ? "complete" : exportMode;
@@ -698,7 +698,7 @@ export default function PixelStudio() {
     canvas.width = project.width * cell;
     canvas.height = project.height * cell + legendHeight;
     const context = canvas.getContext("2d");
-    if (!context) return;
+    if (!context) return null;
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -740,10 +740,46 @@ export default function PixelStudio() {
       });
     }
 
+    return { dataUrl: canvas.toDataURL("image/png"), resolvedMode };
+  }
+
+  function exportPng(exportMode: "current" | "complete" | "printable") {
+    const exported = createExportDataUrl(exportMode);
+    if (!exported) return;
     const link = document.createElement("a");
-    link.download = `${project.name || "mosaipix"}-${resolvedMode}.png`;
-    link.href = canvas.toDataURL("image/png");
+    link.download = `${project.name || "mosaipix"}-${exported.resolvedMode}.png`;
+    link.href = exported.dataUrl;
     link.click();
+  }
+
+  function printPrintableGrid() {
+    const exported = createExportDataUrl("printable");
+    if (!exported) return;
+    const printWindow = window.open("", "mosaipix-print", "width=900,height=1100");
+    if (!printWindow) {
+      exportPng("printable");
+      return;
+    }
+
+    printWindow.opener = null;
+    printWindow.document.title = `${project.name || "Mosaipix"} – ${tr("grille numérotée", "numbered grid")}`;
+    const style = printWindow.document.createElement("style");
+    style.textContent = `
+      @page { size: A4 portrait; margin: 10mm; }
+      html, body { margin: 0; min-height: 100%; background: white; }
+      body { display: grid; place-items: center; }
+      img { display: block; max-width: 100%; max-height: 277mm; object-fit: contain; }
+    `;
+    const image = printWindow.document.createElement("img");
+    image.alt = tr("Grille de coloriage numérotée avec sa légende", "Numbered coloring grid with its legend");
+    image.addEventListener("load", () => {
+      printWindow.focus();
+      printWindow.print();
+    }, { once: true });
+    printWindow.addEventListener("afterprint", () => printWindow.close(), { once: true });
+    printWindow.document.head.append(style);
+    printWindow.document.body.append(image);
+    image.src = exported.dataUrl;
   }
 
   function fitGrid() {
@@ -956,7 +992,8 @@ export default function PixelStudio() {
             <div><span className="label">{tr("TA PROGRESSION", "YOUR PROGRESS")}</span><div className="progress-label"><b>{progress}%</b><span>{correct} {tr("cases justes", "correct cells")} · {filled} {tr("coloriées", "colored")}</span></div><div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><i style={{ width: `${progress}%` }}/></div></div>
             <div className="history-actions"><button disabled={undoStack.length === 0} onClick={undo}>↶ {tr("Annuler", "Undo")}</button><button disabled={redoStack.length === 0} onClick={redo}>↷ {tr("Rétablir", "Redo")}</button></div>
             <button className="download-primary" onClick={() => exportPng("current")}>↓ {filled === 0 ? tr("Télécharger le modèle", "Download the pattern") : tr("Télécharger mon coloriage", "Download my coloring")}</button>
-            <details className="export-menu"><summary>{tr("Autres actions", "More actions")}</summary><div className="tool-actions"><button onClick={() => exportPng("complete")}>{tr("Télécharger le modèle terminé", "Download completed pattern")}</button><button onClick={() => exportPng("printable")}>{tr("Imprimer une grille vierge", "Print a blank grid")}</button><button className={resetPending ? "danger" : ""} onBlur={() => setResetPending(false)} onClick={requestReset}>{resetPending ? tr("Confirmer l’effacement", "Confirm reset") : tr("Recommencer le coloriage", "Start coloring over")}</button></div></details>
+            <div className="paper-export"><span className="label">{tr("VERSION PAPIER", "PAPER VERSION")}</span><div className="paper-actions"><button onClick={() => exportPng("printable")}>↓ {tr("Télécharger la grille", "Download grid")}</button><button onClick={printPrintableGrid}>{tr("Imprimer", "Print")}</button></div><p>{tr("Cases numérotées et légende des couleurs incluses.", "Numbered cells and color key included.")}</p></div>
+            <details className="export-menu"><summary>{tr("Autres actions", "More actions")}</summary><div className="tool-actions"><button onClick={() => exportPng("complete")}>{tr("Télécharger le modèle terminé", "Download completed pattern")}</button><button className={resetPending ? "danger" : ""} onBlur={() => setResetPending(false)} onClick={requestReset}>{resetPending ? tr("Confirmer l’effacement", "Confirm reset") : tr("Recommencer le coloriage", "Start coloring over")}</button></div></details>
           </aside>
 
           <section className="canvas-wrap"><header><div><span className="status-dot"/> {progress === 100 ? tr("TERMINÉ", "DONE") : tr("EN COURS", "IN PROGRESS")}</div><b>{projectName}</b><span>{project.width} × {project.height}</span></header>
@@ -989,7 +1026,7 @@ export default function PixelStudio() {
         </div> : null}
       </div></section>
 
-      <section className="how shell" id="how"><div className="section-heading"><span className="eyebrow">{tr("AUSSI SIMPLE QUE ÇA", "IT'S THAT SIMPLE")}</span><h2>{tr("Imagine, crée, colorie", "Imagine, create, color")}</h2></div><div className="steps"><article><span>01</span><i>✦</i><h3>{tr("Imagine", "Imagine")}</h3><p>{tr("Décris une idée, choisis une photo ou pars d’un modèle.", "Describe an idea, choose a photo, or start from a template.")}</p></article><article><span>02</span><i>▦</i><h3>{tr("Découvre", "Discover")}</h3><p>{tr("Mosaipix prépare automatiquement une grille pixel art et une palette claires.", "Mosaipix automatically builds a clear pixel-art grid and palette.")}</p></article><article><span>03</span><i>✎</i><h3>{tr("Colorie", "Color")}</h3><p>{tr("Suis les numéros, personnalise les couleurs et garde ta création.", "Follow the numbers, customize the colors, and save your creation.")}</p></article></div></section>
+      <section className="how shell" id="how"><div className="section-heading"><span className="eyebrow">{tr("AUSSI SIMPLE QUE ÇA", "IT'S THAT SIMPLE")}</span><h2>{tr("Imagine, crée, colorie", "Imagine, create, color")}</h2></div><div className="steps"><article><div className="step-visual"><span className="step-number">01</span><i>✦</i></div><h3>{tr("Imagine", "Imagine")}</h3><p>{tr("Décris une idée, choisis une photo ou pars d’un modèle.", "Describe an idea, choose a photo, or start from a template.")}</p></article><article><div className="step-visual"><span className="step-number">02</span><i>▦</i></div><h3>{tr("Découvre", "Discover")}</h3><p>{tr("Mosaipix prépare automatiquement une grille pixel art et une palette claires.", "Mosaipix automatically builds a clear pixel-art grid and palette.")}</p></article><article><div className="step-visual"><span className="step-number">03</span><i>✎</i></div><h3>{tr("Colorie", "Color")}</h3><p>{tr("Suis les numéros, personnalise les couleurs et garde ta création.", "Follow the numbers, customize the colors, and save your creation.")}</p></article></div></section>
       <footer><div className="shell"><a className="brand" href="#top"><Brand /></a><p>{tr("Chaque petit carré a désormais une vraie raison d’être.", "Every little square now has a reason to be.")}</p><span>© 2026 Mosaipix</span></div></footer>
     </main>
   );
