@@ -1,5 +1,6 @@
 import { generateText, gateway, Output } from "ai";
 import { z } from "zod";
+import { normalizeGeneratedPattern, type PatternQualityReason } from "@/lib/generated-pattern";
 import type { PixelProject } from "@/lib/pixel-art";
 
 export const runtime = "nodejs";
@@ -74,13 +75,12 @@ export async function POST(request: Request) {
   const { prompt, style, detail, locale } = parsed.data;
   const size = DETAIL_SIZES[detail];
   console.log(JSON.stringify({ level: "info", msg: "generation_start", requestId, style, detail, locale, size }));
-  const rowPattern = new RegExp(`^[0-5]{${size}}$`);
   const patternSchema = z.object({
     name: z.string().trim().min(1).max(48),
     palette: z.array(z.string().regex(/^#[0-9a-f]{6}$/i)).length(6),
-    // Some models obey the row width but occasionally return more rows than
-    // requested. We resample vertically below rather than discard a valid motif.
-    rows: z.array(z.string().regex(rowPattern)).min(1).max(32),
+    // Width and height are normalized after generation. Small models often make
+    // an otherwise harmless one-cell counting mistake in a recognizable motif.
+    rows: z.array(z.string().min(1).max(64)).min(1).max(48),
   });
 
   const styleInstruction = {
@@ -91,27 +91,36 @@ export async function POST(request: Request) {
 
   try {
     const minimumForegroundCells = Math.ceil(size * size * 0.25);
-    let output: z.infer<typeof patternSchema> | undefined;
+    let output: { name: string; palette: string[]; targets: number[] } | undefined;
     let attemptsUsed = 0;
+    let retryFeedback = "";
 
-    // Some small models occasionally comply with the JSON schema but choose an
-    // all-background grid. Give them one explicit correction before failing the
-    // request; this is rare and still keeps the per-creation cost very small.
+    const qualityFeedback: Record<PatternQualityReason, string> = {
+      too_empty: "Le sujet était trop petit ou presque vide.",
+      too_full: "Le fond avait presque disparu.",
+      too_few_colors: "Le dessin n’utilisait pas assez de couleurs.",
+      too_small: "La silhouette était trop étroite pour être lisible.",
+      flat_blocks: "Le résultat ressemblait à des bandes ou à des rectangles uniformes.",
+    };
+
+    // One corrective retry is cheaper and clearer than generating three variants
+    // for every user. The first usable motif is returned immediately.
     for (let attempt = 0; attempt < 2 && !output; attempt += 1) {
       attemptsUsed = attempt + 1;
-      const result = await generateText({
-        model: gateway(MODEL_ID),
-        // Mosaipix only needs a short, constrained grid, so disabling reasoning
-        // keeps latency and cost low.
-        reasoning: "none",
-        temperature: attempt === 0 ? 0.7 : 0.9,
-        maxOutputTokens: 1200,
-        output: Output.object({
-          name: "pixel_art_pattern",
-          description: "Un motif pixel-art reconnaissable avec une palette et des lignes indexées.",
-          schema: patternSchema,
-        }),
-        system: `Tu es un pixel artist spécialisé dans les petits modèles à colorier.
+      try {
+        const result = await generateText({
+          model: gateway(MODEL_ID),
+          // Mosaipix only needs a short, constrained grid, so disabling reasoning
+          // keeps latency and cost low.
+          reasoning: "none",
+          temperature: attempt === 0 ? 0.65 : 0.85,
+          maxOutputTokens: 1400,
+          output: Output.object({
+            name: "pixel_art_pattern",
+            description: "Un motif pixel-art reconnaissable avec une palette et des lignes indexées.",
+            schema: patternSchema,
+          }),
+          system: `Tu es un pixel artist spécialisé dans les petits modèles à colorier.
 Crée une silhouette immédiatement reconnaissable à taille miniature.
 La palette contient exactement 6 couleurs hexadécimales. L'index 0 est le fond.
 Chaque ligne contient exactement ${size} chiffres de 0 à 5, sans espace.
@@ -121,39 +130,34 @@ Utilise de grands aplats cohérents, des contours nets et évite le bruit pixel 
 Ne dessine aucun texte, lettre, chiffre, cadre ou signature.
 Pour les objets connus, respecte leur silhouette caractéristique et leurs couleurs habituelles.
 Donne au motif un nom court en ${locale === "fr" ? "français" : "anglais"}.
-Style demandé : ${styleInstruction}.${attempt === 1 ? " Ta première proposition a été refusée car elle était vide : cette fois, remplis impérativement au moins le quart de la grille avec le sujet demandé." : ""}`,
-        prompt: `Dessine en pixel art : ${prompt}. Construis directement le motif dans les lignes indexées, pas une description.`,
-      });
+Style demandé : ${styleInstruction}.${attempt === 1 ? ` La première proposition a été refusée : ${retryFeedback} Redessine une silhouette différente, irrégulière et immédiatement identifiable.` : ""}`,
+          prompt: `Dessine en pixel art : ${prompt}. Construis directement le motif dans les lignes indexées, pas une description.`,
+        });
 
-      const foregroundCells = result.output.rows
-        .join("")
-        .split("")
-        .filter((cell) => cell !== "0").length;
-      if (foregroundCells >= minimumForegroundCells) {
-        output = result.output;
+        const normalized = normalizeGeneratedPattern(result.output.rows, size, result.output.palette.length);
+        if (normalized.quality.ok) {
+          output = {
+            name: result.output.name,
+            palette: result.output.palette,
+            targets: normalized.targets,
+          };
+        } else {
+          retryFeedback = qualityFeedback[normalized.quality.reason];
+        }
+      } catch {
+        retryFeedback = "La grille ne respectait pas le format demandé.";
       }
     }
 
-    if (!output) throw new Error("The model returned an empty pixel-art grid.");
+    if (!output) throw new Error("The model did not return a usable pixel-art grid.");
 
-    const targets = Array.from({ length: size }, (_, targetY) => {
-      const sourceY = Math.min(
-        output.rows.length - 1,
-        Math.floor((targetY * output.rows.length) / size),
-      );
-      return [...output.rows[sourceY]].map((character) => Number(character));
-    }).flat();
-    const renderedForegroundCells = targets.filter((cell) => cell !== 0).length;
-    if (renderedForegroundCells < minimumForegroundCells) {
-      throw new Error("The model returned an empty pixel-art grid after resizing.");
-    }
     const project: PixelProject = {
       version: 2,
       name: output.name,
       width: size,
       height: size,
       palette: output.palette.map((color) => color.toLowerCase()),
-      targets,
+      targets: output.targets,
     };
 
     console.log(JSON.stringify({

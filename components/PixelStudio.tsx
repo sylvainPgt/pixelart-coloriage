@@ -1,5 +1,6 @@
 "use client";
 
+import NextImage from "next/image";
 import {
   type ChangeEvent,
   type CSSProperties,
@@ -20,6 +21,17 @@ type IdeaDetail = "simple" | "classic" | "detailed";
 type Locale = "fr" | "en";
 type CreationSource = "text" | "image" | "template" | "saved";
 type PaintLayer = Array<number | null>;
+type FreeImageSuggestion = {
+  id: string;
+  title: string;
+  creator: string;
+  attribution: string;
+  license: string;
+  licenseUrl: string | null;
+  sourceUrl: string | null;
+  previewUrl: string;
+};
+type FreeImageCredit = Pick<FreeImageSuggestion, "creator" | "license" | "licenseUrl" | "sourceUrl">;
 type ImageSettings = {
   width: number;
   height: number;
@@ -217,6 +229,15 @@ function loadBrowserImage(dataUrl: string, errorMessage: string) {
   });
 }
 
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Invalid image"));
+    reader.onerror = () => reject(new Error("Invalid image"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function Brand() {
   return (
     <>
@@ -242,6 +263,11 @@ export default function PixelStudio() {
   const [ideaDetail, setIdeaDetail] = useState<IdeaDetail>("classic");
   const [ideaError, setIdeaError] = useState("");
   const [generatingIdea, setGeneratingIdea] = useState(false);
+  const [freeImages, setFreeImages] = useState<FreeImageSuggestion[]>([]);
+  const [freeImageError, setFreeImageError] = useState("");
+  const [searchingFreeImages, setSearchingFreeImages] = useState(false);
+  const [choosingFreeImage, setChoosingFreeImage] = useState<string | null>(null);
+  const [freeImageCredit, setFreeImageCredit] = useState<FreeImageCredit | null>(null);
   const [imageSettings, setImageSettings] = useState<ImageSettings>(DEFAULT_IMAGE_SETTINGS);
   const [sourceDataUrl, setSourceDataUrl] = useState<string | null>(null);
   const [sourceName, setSourceName] = useState("image");
@@ -455,6 +481,67 @@ export default function PixelStudio() {
     }
   }
 
+  async function searchFreeImages() {
+    const cleanPrompt = prompt.trim();
+    if (cleanPrompt.length < 2) {
+      setFreeImageError(locale === "fr" ? "Décris d’abord l’image recherchée." : "Describe the image you want first.");
+      promptRef.current?.focus();
+      return;
+    }
+
+    setSearchingFreeImages(true);
+    setFreeImageError("");
+    try {
+      const response = await fetch("/api/free-images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: cleanPrompt, locale }),
+      });
+      const data: unknown = await response.json();
+      const result = data as { error?: unknown; images?: unknown };
+      if (!response.ok || !Array.isArray(result.images)) {
+        throw new Error(typeof result.error === "string" ? result.error : locale === "fr" ? "Aucune image n’a été trouvée." : "No image was found.");
+      }
+      const suggestions = result.images.filter((image): image is FreeImageSuggestion => Boolean(
+        image && typeof image === "object"
+        && typeof (image as FreeImageSuggestion).id === "string"
+        && typeof (image as FreeImageSuggestion).title === "string"
+        && typeof (image as FreeImageSuggestion).creator === "string"
+        && typeof (image as FreeImageSuggestion).license === "string"
+        && typeof (image as FreeImageSuggestion).previewUrl === "string",
+      ));
+      setFreeImages(suggestions);
+      if (suggestions.length === 0) {
+        setFreeImageError(locale === "fr" ? "Aucune image libre assez proche. Essaie une description plus simple." : "No close open image was found. Try a simpler description.");
+      }
+    } catch (error) {
+      setFreeImages([]);
+      setFreeImageError(error instanceof Error ? error.message : locale === "fr" ? "La recherche a échoué." : "Search failed.");
+    } finally {
+      setSearchingFreeImages(false);
+    }
+  }
+
+  async function chooseFreeImage(image: FreeImageSuggestion) {
+    setChoosingFreeImage(image.id);
+    setFreeImageError("");
+    try {
+      const response = await fetch(image.previewUrl);
+      if (!response.ok) throw new Error(locale === "fr" ? "Cette image n’est plus disponible." : "This image is no longer available.");
+      const dataUrl = await blobToDataUrl(await response.blob());
+      setSourceDataUrl(dataUrl);
+      setSourceName(image.title);
+      setFreeImageCredit(image);
+      setImageError("");
+      setMode("image");
+      window.requestAnimationFrame(() => document.getElementById("panel-image")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    } catch (error) {
+      setFreeImageError(error instanceof Error ? error.message : locale === "fr" ? "Impossible de charger cette image." : "This image could not be loaded.");
+    } finally {
+      setChoosingFreeImage(null);
+    }
+  }
+
   async function generateFromImage(dataUrl: string, name: string, settings = imageSettings) {
     setProcessing(true);
     setImageError("");
@@ -528,6 +615,7 @@ export default function PixelStudio() {
       const cleanName = file.name.replace(/\.[^.]+$/, "") || "image";
       setSourceDataUrl(reader.result);
       setSourceName(cleanName);
+      setFreeImageCredit(null);
       setImageError("");
     };
     reader.readAsDataURL(file);
@@ -750,6 +838,7 @@ export default function PixelStudio() {
               <button className="primary compact" onClick={() => fileRef.current?.click()}>{sourceDataUrl ? tr("Changer de photo", "Change photo") : tr("Choisir une photo", "Choose a photo")}</button>
               <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={importImage}/>
               <p>{tr("Ta photo reste dans ce navigateur et n’est jamais envoyée. Choisis-la, règle le rendu, puis crée ton pixel art.", "Your photo stays in this browser and is never uploaded. Choose it, adjust the look, then create your pixel art.")}</p>
+              {freeImageCredit ? <p className="selected-image-credit">{tr("Image libre", "Open image")} · {freeImageCredit.creator} · {freeImageCredit.sourceUrl ? <a href={freeImageCredit.sourceUrl} target="_blank" rel="noreferrer">{tr("source", "source")}</a> : null} {freeImageCredit.licenseUrl ? <a href={freeImageCredit.licenseUrl} target="_blank" rel="noreferrer">{freeImageCredit.license}</a> : freeImageCredit.license}</p> : null}
             </div>
             <div className="image-controls simple-panel">
               <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices">{[[12, tr("Simple", "Simple")], [16, tr("Classique", "Classic")], [24, tr("Détaillé", "Detailed")]].map(([size, label]) => <button type="button" key={size} className={imageSettings.width === size && imageSettings.height === size ? "active" : ""} aria-pressed={imageSettings.width === size && imageSettings.height === size} onClick={() => setImageSettings((current) => ({ ...current, width: Number(size), height: Number(size) }))}><b>{label}</b><small>{size} × {size}</small></button>)}</div></fieldset>
@@ -770,13 +859,28 @@ export default function PixelStudio() {
 
           {mode === "text" ? <form className="idea-panel" onSubmit={(event) => { event.preventDefault(); void generateIdea(); }}>
             <div className="idea-intro"><span className="idea-spark">✦</span><div><h3>{tr("Décris simplement ton idée", "Simply describe your idea")}</h3><p>{tr("Mosaipix dessinera une première version unique en quelques secondes.", "Mosaipix will draw a unique first version in a few seconds.")}</p></div></div>
-            <label className="idea-prompt"><span>{tr("Ton idée", "Your idea")}</span><input ref={promptRef} value={prompt} onChange={(event) => setPrompt(event.target.value)} required minLength={2} maxLength={80} placeholder={tr("Une banane souriante, un chat astronaute…", "A smiling banana, an astronaut cat…")}/></label>
+            <label className="idea-prompt"><span>{tr("Ton idée", "Your idea")}</span><input ref={promptRef} value={prompt} onChange={(event) => { setPrompt(event.target.value); setFreeImages([]); setFreeImageError(""); }} required minLength={2} maxLength={80} placeholder={tr("Une banane souriante, un chat astronaute…", "A smiling banana, an astronaut cat…")}/></label>
             <div className="prompt-suggestions" aria-label={tr("Exemples d’idées", "Example ideas")}>{(isFrench ? ["Une banane souriante", "Un chat astronaute", "Une petite maison fleurie"] : ["A smiling banana", "An astronaut cat", "A tiny flower-covered house"]).map((suggestion) => <button type="button" key={suggestion} onClick={() => setPrompt(suggestion)}>{suggestion}</button>)}</div>
             <fieldset className="choice-field"><legend>{tr("Ambiance", "Style")}</legend><div className="choice-cards">{ideaStyles.map(([value, label, description]) => <button type="button" key={value} className={ideaStyle === value ? "active" : ""} aria-pressed={ideaStyle === value} onClick={() => setIdeaStyle(value)}><b>{label}</b><small>{description}</small></button>)}</div></fieldset>
             <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices">{ideaDetails.map(([value, label, dimensions]) => <button type="button" key={value} className={ideaDetail === value ? "active" : ""} aria-pressed={ideaDetail === value} onClick={() => setIdeaDetail(value)}><b>{label}</b><small>{dimensions}</small></button>)}</div></fieldset>
             <button className="primary idea-generate" disabled={generatingIdea}>{generatingIdea ? tr("Mosaipix dessine ton idée…", "Mosaipix is drawing your idea…") : tr("Créer mon pixel art", "Create my pixel art")}<span aria-hidden="true">→</span></button>
             <p className="ai-note">{tr("Ta description est envoyée au modèle IA, jamais tes photos. La création peut prendre quelques secondes.", "Your description is sent to the AI model, never your photos. Generation may take a few seconds.")}</p>
             {ideaError ? <p className="form-error" role="alert">{ideaError}</p> : null}
+            <div className="free-image-option">
+              <span>{tr("Tu préfères partir d’une vraie image ?", "Would you rather start from an existing image?")}</span>
+              <button type="button" className="quiet-button" disabled={searchingFreeImages} onClick={() => void searchFreeImages()}>{searchingFreeImages ? tr("Recherche…", "Searching…") : tr("Voir 3 images libres", "See 3 open images")}</button>
+            </div>
+            {freeImageError ? <p className="form-error" role="alert">{freeImageError}</p> : null}
+            {freeImages.length > 0 ? <div className="free-image-results" aria-label={tr("Images libres proposées", "Suggested open images")}>
+              {freeImages.map((image) => <article key={image.id}>
+                <button type="button" className="free-image-select" disabled={choosingFreeImage !== null} onClick={() => void chooseFreeImage(image)} aria-label={tr(`Utiliser ${image.title}`, `Use ${image.title}`)}>
+                  <span className="free-image-thumbnail"><NextImage src={image.previewUrl} alt="" fill sizes="(max-width: 600px) 100vw, 240px" unoptimized /></span>
+                  <strong>{choosingFreeImage === image.id ? tr("Chargement…", "Loading…") : image.title}</strong>
+                </button>
+                <small>{image.creator} · {image.sourceUrl ? <a href={image.sourceUrl} target="_blank" rel="noreferrer">{tr("source", "source")}</a> : null} {image.licenseUrl ? <a href={image.licenseUrl} target="_blank" rel="noreferrer">{image.license}</a> : image.license}</small>
+              </article>)}
+              <p>{tr("Résultats fournis par Openverse. Choisis une image pour régler sa transformation.", "Results provided by Openverse. Choose an image to adjust its conversion.")}</p>
+            </div> : null}
           </form> : null}
         </div>
 
