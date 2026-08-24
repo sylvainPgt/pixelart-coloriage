@@ -69,9 +69,11 @@ try {
   mkdirSync("artifacts", { recursive: true });
   await page.screenshot({ path: "artifacts/mosaipix-desktop.png", fullPage: false });
   await page.locator(".idea-panel").screenshot({ path: "artifacts/mosaipix-idea-panel.png" });
+  await page.locator(".steps").screenshot({ path: "artifacts/mosaipix-steps.png" });
 
   assert(await page.locator(".hero-pixel-grid > span").count() === 256, "Le héros doit être un vrai motif 16 × 16.");
   assert(await page.locator(".pixel-heart").count() === 0, "L’ancien cœur vectoriel ne doit plus exister.");
+  assert(await page.locator(".step-number").allTextContents().then((steps) => steps.join(",")) === "01,02,03", "Les numéros des étapes doivent être lisibles au premier plan.");
   await page.getByRole("button", { name: "EN", exact: true }).click();
   await page.getByRole("heading", { name: "What do you want to create?" }).waitFor();
   assert(await page.locator("html").getAttribute("lang") === "en", "Le sélecteur anglais doit mettre à jour la langue du document.");
@@ -104,6 +106,14 @@ try {
     page.getByRole("button", { name: "Télécharger le modèle" }).click(),
   ]);
   assert(modelDownload.suggestedFilename().endsWith("-complete.png"), "Un projet non colorié doit télécharger le modèle complet, jamais une image blanche.");
+  const [printableDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Télécharger la grille" }).click(),
+  ]);
+  assert(printableDownload.suggestedFilename().endsWith("-printable.png"), "La version papier doit télécharger une grille numérotée dédiée.");
+  await printableDownload.saveAs(path.resolve("artifacts/mosaipix-printable-grid.png"));
+  assert(await page.getByRole("button", { name: "Imprimer" }).isVisible(), "L’impression directe de la grille doit être proposée dans l’éditeur.");
+  await page.locator(".paper-export").screenshot({ path: "artifacts/mosaipix-paper-export.png" });
   assert(await page.locator('.pixel-grid button[tabindex="0"]').count() === 1, "Une seule cellule doit être présente dans l’ordre de tabulation.");
   assert(!(await page.getByRole("button", { name: "Pipette" }).isVisible()), "Les outils avancés doivent être masqués au départ.");
 
