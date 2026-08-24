@@ -114,12 +114,18 @@ try {
   await page.getByRole("button", { name: "Créer mon pixel art" }).click();
   await page.locator(".editor-card").waitFor();
   await page.locator(".canvas-wrap > header").getByText("Banane souriante", { exact: true }).waitFor();
+  const [modelDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Télécharger le modèle" }).click(),
+  ]);
+  assert(modelDownload.suggestedFilename().endsWith("-complete.png"), "Un projet non colorié doit télécharger le modèle complet, jamais une image blanche.");
   assert(await page.locator('.pixel-grid button[tabindex="0"]').count() === 1, "Une seule cellule doit être présente dans l’ordre de tabulation.");
   assert(!(await page.getByRole("button", { name: "Pipette" }).isVisible()), "Les outils avancés doivent être masqués au départ.");
 
   await page.locator(".palette .swatch").nth(2).click();
   const correctCell = page.locator('.pixel-grid button[aria-label*="Couleur cible 3"]').first();
   await correctCell.click();
+  await page.getByRole("button", { name: "Télécharger mon coloriage" }).waitFor();
   await page.locator(".progress-label b").filter({ hasNotText: "0%" }).waitFor();
   await page.getByRole("button", { name: "Annuler" }).click();
   await page.locator(".progress-label b").filter({ hasText: "0%" }).waitFor();
