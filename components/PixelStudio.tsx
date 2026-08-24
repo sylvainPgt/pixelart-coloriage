@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import PixelMiniature from "@/components/PixelMiniature";
+import { findForegroundBounds } from "@/lib/image-crop";
 import { type PixelProject, type Rgb, quantizePixels } from "@/lib/pixel-art";
 
 type Mode = "templates" | "image" | "text";
@@ -483,7 +484,7 @@ export default function PixelStudio() {
         width: generation.size,
         height: generation.size,
         paletteSize: generation.paletteSize,
-        cropMode: "contain",
+        cropMode: "cover",
         focusX: 50,
         focusY: 50,
         contrast: 112,
@@ -584,22 +585,53 @@ export default function PixelStudio() {
       context.imageSmoothingQuality = "high";
       context.filter = `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturation}%)`;
 
-      const sourceRatio = image.width / image.height;
+      let cropX = 0;
+      let cropY = 0;
+      let cropWidth = image.width;
+      let cropHeight = image.height;
+
+      if (source === "text") {
+        const analysisSize = 128;
+        const analysisCanvas = document.createElement("canvas");
+        analysisCanvas.width = analysisSize;
+        analysisCanvas.height = analysisSize;
+        const analysisContext = analysisCanvas.getContext("2d", { willReadFrequently: true });
+        if (analysisContext) {
+          analysisContext.drawImage(image, 0, 0, analysisSize, analysisSize);
+          const bounds = findForegroundBounds(
+            analysisContext.getImageData(0, 0, analysisSize, analysisSize).data,
+            analysisSize,
+            analysisSize,
+          );
+          if (bounds) {
+            cropX = bounds.x / analysisSize * image.width;
+            cropY = bounds.y / analysisSize * image.height;
+            cropWidth = bounds.width / analysisSize * image.width;
+            cropHeight = bounds.height / analysisSize * image.height;
+          }
+        }
+      }
+
+      const sourceRatio = cropWidth / cropHeight;
       const targetRatio = settings.width / settings.height;
       if (settings.cropMode === "cover") {
-        let sourceWidth = image.width;
-        let sourceHeight = image.height;
-        if (sourceRatio > targetRatio) sourceWidth = image.height * targetRatio;
-        else sourceHeight = image.width / targetRatio;
-        const sourceX = (image.width - sourceWidth) * settings.focusX / 100;
-        const sourceY = (image.height - sourceHeight) * settings.focusY / 100;
+        let sourceWidth = cropWidth;
+        let sourceHeight = cropHeight;
+        if (sourceRatio > targetRatio) sourceWidth = cropHeight * targetRatio;
+        else sourceHeight = cropWidth / targetRatio;
+        const sourceX = cropX + (cropWidth - sourceWidth) * settings.focusX / 100;
+        const sourceY = cropY + (cropHeight - sourceHeight) * settings.focusY / 100;
         context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, settings.width, settings.height);
       } else {
-        const scale = Math.min(settings.width / image.width, settings.height / image.height);
-        const drawWidth = image.width * scale;
-        const drawHeight = image.height * scale;
+        const scale = Math.min(settings.width / cropWidth, settings.height / cropHeight);
+        const drawWidth = cropWidth * scale;
+        const drawHeight = cropHeight * scale;
         context.drawImage(
           image,
+          cropX,
+          cropY,
+          cropWidth,
+          cropHeight,
           (settings.width - drawWidth) / 2,
           (settings.height - drawHeight) / 2,
           drawWidth,

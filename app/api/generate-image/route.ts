@@ -116,6 +116,7 @@ export async function POST(request: Request) {
       abortSignal: AbortSignal.timeout(50_000),
       prompt: `Create one clean, flat, icon-like illustration of: ${prompt}.
 Show a single centered subject, fully visible, on a plain warm off-white background.
+The subject must fill about 80 percent of the square canvas, with only a modest clean margin around it.
 Every concept in the request must have unmistakable visual traits. For a combined subject, make every part clearly identifiable.
 Use ${styleInstruction}. Use 6 to 8 large, coherent color areas, a strong silhouette, and no gradients or tiny texture.
 No text, letters, numbers, frame, watermark, scenery, split panels, geometric test pattern, or abstract color blocks.
