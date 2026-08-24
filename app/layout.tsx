@@ -15,7 +15,7 @@ const display = Fraunces({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://pixelia-alpha.vercel.app"),
+  metadataBase: new URL("https://mosaipix.com"),
   title: "Mosaipix — Pixel Art Studio",
   description: "Turn a photo or an idea into real pixel art, then color and customize it online.",
   openGraph: {
