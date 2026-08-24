@@ -80,47 +80,58 @@ export async function POST(request: Request) {
   }[style];
 
   try {
-    const result = await generateText({
-      model: gateway(MODEL_ID),
-      // Qwen exposes structured output in non-thinking mode. Pixelia only
-      // needs a short, constrained grid, so this also keeps latency and cost low.
-      reasoning: "none",
-      maxOutputTokens: 1200,
-      output: Output.object({
-        name: "pixel_art_pattern",
-        description: "Un motif pixel-art reconnaissable avec une palette et des lignes indexées.",
-        schema: patternSchema,
-      }),
-      system: `Tu es un pixel artist spécialisé dans les petits modèles à colorier.
+    const minimumForegroundCells = Math.ceil(size * size * 0.25);
+    let output: z.infer<typeof patternSchema> | undefined;
+
+    // Some small models occasionally comply with the JSON schema but choose an
+    // all-background grid. Give them one explicit correction before failing the
+    // request; this is rare and still keeps the per-creation cost very small.
+    for (let attempt = 0; attempt < 2 && !output; attempt += 1) {
+      const result = await generateText({
+        model: gateway(MODEL_ID),
+        // Qwen exposes structured output in non-thinking mode. Pixelia only
+        // needs a short, constrained grid, so this also keeps latency and cost low.
+        reasoning: "none",
+        temperature: attempt === 0 ? 0.7 : 0.9,
+        maxOutputTokens: 1200,
+        output: Output.object({
+          name: "pixel_art_pattern",
+          description: "Un motif pixel-art reconnaissable avec une palette et des lignes indexées.",
+          schema: patternSchema,
+        }),
+        system: `Tu es un pixel artist spécialisé dans les petits modèles à colorier.
 Crée une silhouette immédiatement reconnaissable à taille miniature.
 La palette contient exactement 6 couleurs hexadécimales. L'index 0 est le fond.
 Chaque ligne contient exactement ${size} chiffres de 0 à 5, sans espace.
 Le sujet doit être centré, occuper entre 25 % et 65 % de la grille et rester entouré de fond.
-Tu dois dessiner un vrai sujet : il faut au moins ${Math.ceil(size * size * 0.25)} cases non nulles. Ne renvoie jamais une grille vide.
+Tu dois dessiner un vrai sujet : il faut au moins ${minimumForegroundCells} cases non nulles. Ne renvoie jamais une grille vide.
 Utilise de grands aplats cohérents, des contours nets et évite le bruit pixel par pixel.
 Ne dessine aucun texte, lettre, chiffre, cadre ou signature.
 Pour les objets connus, respecte leur silhouette caractéristique et leurs couleurs habituelles.
-Style demandé : ${styleInstruction}.`,
-      prompt: `Dessine en pixel art : ${prompt}. Construis directement le motif dans les lignes indexées, pas une description.`,
-    });
+Style demandé : ${styleInstruction}.${attempt === 1 ? " Ta première proposition a été refusée car elle était vide : cette fois, remplis impérativement au moins le quart de la grille avec le sujet demandé." : ""}`,
+        prompt: `Dessine en pixel art : ${prompt}. Construis directement le motif dans les lignes indexées, pas une description.`,
+      });
 
-    const foregroundCells = result.output.rows
-      .join("")
-      .split("")
-      .filter((cell) => cell !== "0").length;
-    if (foregroundCells < Math.ceil(size * size * 0.25)) {
-      throw new Error("The model returned an empty pixel-art grid.");
+      const foregroundCells = result.output.rows
+        .join("")
+        .split("")
+        .filter((cell) => cell !== "0").length;
+      if (foregroundCells >= minimumForegroundCells) {
+        output = result.output;
+      }
     }
 
-    const targets = result.output.rows.flatMap((row) =>
+    if (!output) throw new Error("The model returned an empty pixel-art grid.");
+
+    const targets = output.rows.flatMap((row) =>
       [...row].map((character) => Number(character)),
     );
     const project: PixelProject = {
       version: 2,
-      name: result.output.name,
+      name: output.name,
       width: size,
       height: size,
-      palette: result.output.palette.map((color) => color.toLowerCase()),
+      palette: output.palette.map((color) => color.toLowerCase()),
       targets,
     };
 
