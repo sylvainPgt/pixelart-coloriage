@@ -641,8 +641,11 @@ export default function PixelStudio() {
   }
 
   function exportPng(exportMode: "current" | "complete" | "printable") {
-    const cell = exportMode === "printable" ? 46 : 32;
-    const legendHeight = exportMode === "printable" ? Math.ceil(project.palette.length / 4) * 42 + 48 : 0;
+    // A brand-new coloring has no painted cells. Export the generated model in
+    // that case so the primary download can never produce a blank white image.
+    const resolvedMode = exportMode === "current" && filled === 0 ? "complete" : exportMode;
+    const cell = resolvedMode === "printable" ? 46 : 32;
+    const legendHeight = resolvedMode === "printable" ? Math.ceil(project.palette.length / 4) * 42 + 48 : 0;
     const canvas = document.createElement("canvas");
     canvas.width = project.width * cell;
     canvas.height = project.height * cell + legendHeight;
@@ -655,12 +658,12 @@ export default function PixelStudio() {
       const x = (index % project.width) * cell;
       const y = Math.floor(index / project.width) * cell;
       const paintedIndex = painted[index];
-      if (exportMode === "complete") context.fillStyle = project.palette[target];
-      else if (exportMode === "current") context.fillStyle = paintedIndex === null ? "#ffffff" : project.palette[paintedIndex];
+      if (resolvedMode === "complete") context.fillStyle = project.palette[target];
+      else if (resolvedMode === "current") context.fillStyle = paintedIndex === null ? "#ffffff" : project.palette[paintedIndex];
       else context.fillStyle = "#ffffff";
       context.fillRect(x, y, cell, cell);
 
-      if (exportMode === "printable") {
+      if (resolvedMode === "printable") {
         context.strokeStyle = "#9a97a4";
         context.strokeRect(x, y, cell, cell);
         context.fillStyle = "#2d2b3f";
@@ -671,7 +674,7 @@ export default function PixelStudio() {
       }
     });
 
-    if (exportMode === "printable") {
+    if (resolvedMode === "printable") {
       const top = project.height * cell + 28;
       project.palette.forEach((color, index) => {
         const column = index % 4;
@@ -690,7 +693,7 @@ export default function PixelStudio() {
     }
 
     const link = document.createElement("a");
-    link.download = `${project.name || "mosaipix"}-${exportMode}.png`;
+    link.download = `${project.name || "mosaipix"}-${resolvedMode}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   }
@@ -902,8 +905,8 @@ export default function PixelStudio() {
             <div><span className="label">{tr("CHOISIS UNE COULEUR", "CHOOSE A COLOR")}</span><div className="palette">{project.palette.map((color, index) => <button key={`${index}-${color}`} className={selected === index ? "swatch selected" : "swatch"} style={{ background: color }} aria-label={`${tr("Couleur", "Color")} ${index + 1}, ${color}`} aria-pressed={selected === index} onClick={() => { setSelected(index); setTool("pencil"); }}><span>{index + 1}</span></button>)}</div><details className="palette-settings"><summary>{tr("Modifier cette couleur", "Edit this color")}</summary><label className="color-editor">{tr("Couleur", "Color")} {selected + 1}<input type="color" value={project.palette[selected]} onChange={(event) => changePaletteColor(event.target.value)}/></label></details></div>
             <div><span className="label">{tr("TA PROGRESSION", "YOUR PROGRESS")}</span><div className="progress-label"><b>{progress}%</b><span>{correct} {tr("cases justes", "correct cells")} · {filled} {tr("coloriées", "colored")}</span></div><div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><i style={{ width: `${progress}%` }}/></div></div>
             <div className="history-actions"><button disabled={undoStack.length === 0} onClick={undo}>↶ {tr("Annuler", "Undo")}</button><button disabled={redoStack.length === 0} onClick={redo}>↷ {tr("Rétablir", "Redo")}</button></div>
-            <button className="download-primary" onClick={() => exportPng("current")}>↓ {tr("Télécharger mon dessin", "Download my drawing")}</button>
-            <details className="export-menu"><summary>{tr("Autres actions", "More actions")}</summary><div className="tool-actions"><button onClick={() => exportPng("complete")}>{tr("Voir le modèle terminé", "View completed pattern")}</button><button onClick={() => exportPng("printable")}>{tr("Imprimer une grille vierge", "Print a blank grid")}</button><button className={resetPending ? "danger" : ""} onBlur={() => setResetPending(false)} onClick={requestReset}>{resetPending ? tr("Confirmer l’effacement", "Confirm reset") : tr("Recommencer le coloriage", "Start coloring over")}</button></div></details>
+            <button className="download-primary" onClick={() => exportPng("current")}>↓ {filled === 0 ? tr("Télécharger le modèle", "Download the pattern") : tr("Télécharger mon coloriage", "Download my coloring")}</button>
+            <details className="export-menu"><summary>{tr("Autres actions", "More actions")}</summary><div className="tool-actions"><button onClick={() => exportPng("complete")}>{tr("Télécharger le modèle terminé", "Download completed pattern")}</button><button onClick={() => exportPng("printable")}>{tr("Imprimer une grille vierge", "Print a blank grid")}</button><button className={resetPending ? "danger" : ""} onBlur={() => setResetPending(false)} onClick={requestReset}>{resetPending ? tr("Confirmer l’effacement", "Confirm reset") : tr("Recommencer le coloriage", "Start coloring over")}</button></div></details>
           </aside>
 
           <section className="canvas-wrap"><header><div><span className="status-dot"/> {progress === 100 ? tr("TERMINÉ", "DONE") : tr("EN COURS", "IN PROGRESS")}</div><b>{projectName}</b><span>{project.width} × {project.height}</span></header>
