@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import PixelMiniature from "@/components/PixelMiniature";
+import { findForegroundBounds } from "@/lib/image-crop";
 import { type PixelProject, type Rgb, quantizePixels } from "@/lib/pixel-art";
 
 type Mode = "templates" | "image" | "text";
@@ -71,10 +72,15 @@ const IDEA_STYLES: Array<[IdeaStyle, string, string]> = [
   ["minimal", "Épuré", "Silhouette simple et immédiate"],
 ];
 const IDEA_DETAILS: Array<[IdeaDetail, string, string]> = [
-  ["simple", "Simple", "12 × 12"],
-  ["classic", "Classique", "16 × 16"],
-  ["detailed", "Détaillé", "24 × 24"],
+  ["simple", "Simple", "16 × 16"],
+  ["classic", "Classique", "24 × 24"],
+  ["detailed", "Détaillé", "32 × 32"],
 ];
+const IDEA_GENERATION_SETTINGS: Record<IdeaDetail, { size: number; paletteSize: number }> = {
+  simple: { size: 16, paletteSize: 6 },
+  classic: { size: 24, paletteSize: 8 },
+  detailed: { size: 32, paletteSize: 10 },
+};
 const COLOR_SETS = {
   cream: "#fffaf0",
   ink: "#18172d",
@@ -203,23 +209,6 @@ function validateSavedProject(value: unknown): value is { project: PixelProject;
   return validPalette && validTargets && validPaint;
 }
 
-function validateGeneratedProject(value: unknown): value is PixelProject {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<PixelProject>;
-  return Boolean(
-    candidate.version === 2
-    && typeof candidate.name === "string"
-    && Number.isInteger(candidate.width)
-    && Number.isInteger(candidate.height)
-    && Array.isArray(candidate.palette)
-    && candidate.palette.length === 6
-    && candidate.palette.every((color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color))
-    && Array.isArray(candidate.targets)
-    && candidate.targets.length === Number(candidate.width) * Number(candidate.height)
-    && candidate.targets.every((target) => Number.isInteger(target) && target >= 0 && target < 6),
-  );
-}
-
 function loadBrowserImage(dataUrl: string, errorMessage: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -263,6 +252,7 @@ export default function PixelStudio() {
   const [ideaDetail, setIdeaDetail] = useState<IdeaDetail>("classic");
   const [ideaError, setIdeaError] = useState("");
   const [ideaNotice, setIdeaNotice] = useState("");
+  const [ideaRemaining, setIdeaRemaining] = useState<number | null>(null);
   const [generatingIdea, setGeneratingIdea] = useState(false);
   const [freeImages, setFreeImages] = useState<FreeImageSuggestion[]>([]);
   const [freeImageError, setFreeImageError] = useState("");
@@ -460,7 +450,7 @@ export default function PixelStudio() {
     setIdeaError("");
     setIdeaNotice("");
     try {
-      const response = await fetch("/api/generate-pattern", {
+      const response = await fetch("/api/generate-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -470,19 +460,44 @@ export default function PixelStudio() {
           locale,
         }),
       });
-      const data: unknown = await response.json();
-      const result = data as { error?: unknown; project?: unknown };
-      if (!response.ok || !validateGeneratedProject(result.project)) {
-        const message = typeof result.error === "string" ? result.error : locale === "fr" ? "Le motif reçu est incomplet." : "The generated pattern is incomplete.";
-        if (response.status >= 500 && await searchFreeImages()) {
-          setIdeaNotice(locale === "fr"
-            ? "L’IA n’a pas trouvé un dessin assez lisible cette fois. Voici 3 images libres à transformer en pixel art."
-            : "The AI did not find a clear enough drawing this time. Here are 3 open images to turn into pixel art.");
+      const remainingHeader = response.headers.get("X-RateLimit-Remaining");
+      const remaining = remainingHeader === null ? Number.NaN : Number(remainingHeader);
+      if (Number.isFinite(remaining)) setIdeaRemaining(remaining);
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => null);
+        const result = data as { error?: unknown } | null;
+        const message = typeof result?.error === "string" ? result.error : locale === "fr" ? "L’image n’a pas pu être créée." : "The image could not be created.";
+        if ((response.status === 402 || response.status === 429 || response.status >= 500) && await searchFreeImages()) {
+          setIdeaNotice(`${message} ${locale === "fr" ? "Voici 3 images libres à transformer en pixel art." : "Here are 3 open images to turn into pixel art."}`);
           return;
         }
         throw new Error(message);
       }
-      loadProject(result.project, "text");
+      const imageBlob = await response.blob();
+      if (!imageBlob.type.startsWith("image/")) {
+        throw new Error(locale === "fr" ? "Le service n’a pas renvoyé une image valide." : "The service did not return a valid image.");
+      }
+      const dataUrl = await blobToDataUrl(imageBlob);
+      const generation = IDEA_GENERATION_SETTINGS[ideaDetail];
+      const settings: ImageSettings = {
+        ...imageSettings,
+        width: generation.size,
+        height: generation.size,
+        paletteSize: generation.paletteSize,
+        cropMode: "cover",
+        focusX: 50,
+        focusY: 50,
+        contrast: 112,
+        saturation: 108,
+        dither: false,
+      };
+      setImageSettings(settings);
+      setSourceDataUrl(dataUrl);
+      setSourceName(cleanPrompt);
+      setFreeImageCredit(null);
+      if (!await generateFromImage(dataUrl, cleanPrompt, settings, "text")) {
+        throw new Error(locale === "fr" ? "L’image a été créée, mais sa conversion a échoué." : "The image was created, but its conversion failed.");
+      }
     } catch (error) {
       setIdeaError(error instanceof Error ? error.message : locale === "fr" ? "La création a échoué. Réessaie." : "Generation failed. Please try again.");
     } finally {
@@ -553,7 +568,7 @@ export default function PixelStudio() {
     }
   }
 
-  async function generateFromImage(dataUrl: string, name: string, settings = imageSettings) {
+  async function generateFromImage(dataUrl: string, name: string, settings = imageSettings, source: CreationSource = "image"): Promise<boolean> {
     setProcessing(true);
     setImageError("");
     try {
@@ -570,22 +585,53 @@ export default function PixelStudio() {
       context.imageSmoothingQuality = "high";
       context.filter = `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturation}%)`;
 
-      const sourceRatio = image.width / image.height;
+      let cropX = 0;
+      let cropY = 0;
+      let cropWidth = image.width;
+      let cropHeight = image.height;
+
+      if (source === "text") {
+        const analysisSize = 128;
+        const analysisCanvas = document.createElement("canvas");
+        analysisCanvas.width = analysisSize;
+        analysisCanvas.height = analysisSize;
+        const analysisContext = analysisCanvas.getContext("2d", { willReadFrequently: true });
+        if (analysisContext) {
+          analysisContext.drawImage(image, 0, 0, analysisSize, analysisSize);
+          const bounds = findForegroundBounds(
+            analysisContext.getImageData(0, 0, analysisSize, analysisSize).data,
+            analysisSize,
+            analysisSize,
+          );
+          if (bounds) {
+            cropX = bounds.x / analysisSize * image.width;
+            cropY = bounds.y / analysisSize * image.height;
+            cropWidth = bounds.width / analysisSize * image.width;
+            cropHeight = bounds.height / analysisSize * image.height;
+          }
+        }
+      }
+
+      const sourceRatio = cropWidth / cropHeight;
       const targetRatio = settings.width / settings.height;
       if (settings.cropMode === "cover") {
-        let sourceWidth = image.width;
-        let sourceHeight = image.height;
-        if (sourceRatio > targetRatio) sourceWidth = image.height * targetRatio;
-        else sourceHeight = image.width / targetRatio;
-        const sourceX = (image.width - sourceWidth) * settings.focusX / 100;
-        const sourceY = (image.height - sourceHeight) * settings.focusY / 100;
+        let sourceWidth = cropWidth;
+        let sourceHeight = cropHeight;
+        if (sourceRatio > targetRatio) sourceWidth = cropHeight * targetRatio;
+        else sourceHeight = cropWidth / targetRatio;
+        const sourceX = cropX + (cropWidth - sourceWidth) * settings.focusX / 100;
+        const sourceY = cropY + (cropHeight - sourceHeight) * settings.focusY / 100;
         context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, settings.width, settings.height);
       } else {
-        const scale = Math.min(settings.width / image.width, settings.height / image.height);
-        const drawWidth = image.width * scale;
-        const drawHeight = image.height * scale;
+        const scale = Math.min(settings.width / cropWidth, settings.height / cropHeight);
+        const drawWidth = cropWidth * scale;
+        const drawHeight = cropHeight * scale;
         context.drawImage(
           image,
+          cropX,
+          cropY,
+          cropWidth,
+          cropHeight,
           (settings.width - drawWidth) / 2,
           (settings.height - drawHeight) / 2,
           drawWidth,
@@ -608,9 +654,11 @@ export default function PixelStudio() {
         height: settings.height,
         palette: quantized.palette,
         targets: quantized.indices,
-      }, "image");
+      }, source);
+      return true;
     } catch (error) {
       setImageError(error instanceof Error ? error.message : locale === "fr" ? "La génération a échoué." : "Generation failed.");
+      return false;
     } finally {
       setProcessing(false);
     }
@@ -872,13 +920,15 @@ export default function PixelStudio() {
           </div> : null}
 
           {mode === "text" ? <form className="idea-panel" onSubmit={(event) => { event.preventDefault(); void generateIdea(); }}>
-            <div className="idea-intro"><span className="idea-spark">✦</span><div><h3>{tr("Décris simplement ton idée", "Simply describe your idea")}</h3><p>{tr("Mosaipix dessinera une première version unique en quelques secondes.", "Mosaipix will draw a unique first version in a few seconds.")}</p></div></div>
+            <div className="idea-intro"><span className="idea-spark">✦</span><div><h3>{tr("Décris simplement ton idée", "Simply describe your idea")}</h3><p>{tr("Mosaipix crée une vraie image, puis la transforme en grille de pixel art.", "Mosaipix creates a real image, then turns it into a pixel-art grid.")}</p></div></div>
             <label className="idea-prompt"><span>{tr("Ton idée", "Your idea")}</span><input ref={promptRef} value={prompt} onChange={(event) => { setPrompt(event.target.value); setIdeaNotice(""); setFreeImages([]); setFreeImageError(""); }} required minLength={2} maxLength={80} placeholder={tr("Une banane souriante, un chat astronaute…", "A smiling banana, an astronaut cat…")}/></label>
             <div className="prompt-suggestions" aria-label={tr("Exemples d’idées", "Example ideas")}>{(isFrench ? ["Une banane souriante", "Un chat astronaute", "Une petite maison fleurie"] : ["A smiling banana", "An astronaut cat", "A tiny flower-covered house"]).map((suggestion) => <button type="button" key={suggestion} onClick={() => { setPrompt(suggestion); setIdeaNotice(""); setFreeImages([]); setFreeImageError(""); }}>{suggestion}</button>)}</div>
             <fieldset className="choice-field"><legend>{tr("Ambiance", "Style")}</legend><div className="choice-cards">{ideaStyles.map(([value, label, description]) => <button type="button" key={value} className={ideaStyle === value ? "active" : ""} aria-pressed={ideaStyle === value} onClick={() => setIdeaStyle(value)}><b>{label}</b><small>{description}</small></button>)}</div></fieldset>
             <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices">{ideaDetails.map(([value, label, dimensions]) => <button type="button" key={value} className={ideaDetail === value ? "active" : ""} aria-pressed={ideaDetail === value} onClick={() => setIdeaDetail(value)}><b>{label}</b><small>{dimensions}</small></button>)}</div></fieldset>
-            <button className="primary idea-generate" disabled={generatingIdea}>{generatingIdea ? tr("Mosaipix dessine ton idée…", "Mosaipix is drawing your idea…") : tr("Créer mon pixel art", "Create my pixel art")}<span aria-hidden="true">→</span></button>
-            <p className="ai-note">{tr("Ta description est envoyée au modèle IA, jamais tes photos. La création peut prendre quelques secondes.", "Your description is sent to the AI model, never your photos. Generation may take a few seconds.")}</p>
+            <button className="primary idea-generate" disabled={generatingIdea}>{generatingIdea ? tr("Mosaipix imagine puis pixelise…", "Mosaipix is imagining and pixelating…") : tr("Créer mon pixel art", "Create my pixel art")}<span aria-hidden="true">→</span></button>
+            <p className="ai-note">{ideaRemaining === null
+              ? tr("3 créations IA maximum par adresse réseau et par 24 h. Les images libres restent illimitées.", "Up to 3 AI creations per network address every 24 hours. Open images remain unlimited.")
+              : tr(`${ideaRemaining} création${ideaRemaining > 1 ? "s" : ""} IA restante${ideaRemaining > 1 ? "s" : ""} pour ces 24 h.`, `${ideaRemaining} AI creation${ideaRemaining === 1 ? "" : "s"} left for these 24 hours.`)}</p>
             {ideaError ? <p className="form-error" role="alert">{ideaError}</p> : null}
             {ideaNotice ? <p className="form-notice" role="status">{ideaNotice}</p> : null}
             <div className="free-image-option">
