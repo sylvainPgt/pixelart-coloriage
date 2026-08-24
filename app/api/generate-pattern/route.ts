@@ -19,6 +19,7 @@ const requestSchema = z.object({
   prompt: z.string().trim().min(2).max(80),
   style: z.enum(["cute", "retro", "minimal"]),
   detail: z.enum(["simple", "classic", "detailed"]),
+  locale: z.enum(["fr", "en"]).default("fr"),
 });
 
 type RateEntry = { count: number; resetAt: number };
@@ -50,21 +51,22 @@ export async function POST(request: Request) {
   }
 
   const parsed = requestSchema.safeParse(body);
+  const requestedLocale = typeof body === "object" && body !== null && "locale" in body && body.locale === "en" ? "en" : "fr";
   if (!parsed.success) {
     return Response.json(
-      { error: "Décris ton idée en 2 à 80 caractères." },
+      { error: requestedLocale === "fr" ? "Décris ton idée en 2 à 80 caractères." : "Describe your idea in 2 to 80 characters." },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
 
   if (isRateLimited(clientIdentifier(request))) {
     return Response.json(
-      { error: "Tu as atteint les 5 créations autorisées cette heure-ci. Réessaie un peu plus tard." },
+      { error: parsed.data.locale === "fr" ? "Tu as atteint les 5 créations autorisées cette heure-ci. Réessaie un peu plus tard." : "You have reached the limit of 5 creations per hour. Please try again later." },
       { status: 429, headers: { "Cache-Control": "no-store" } },
     );
   }
 
-  const { prompt, style, detail } = parsed.data;
+  const { prompt, style, detail, locale } = parsed.data;
   const size = DETAIL_SIZES[detail];
   const rowPattern = new RegExp(`^[0-5]{${size}}$`);
   const patternSchema = z.object({
@@ -91,7 +93,7 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < 2 && !output; attempt += 1) {
       const result = await generateText({
         model: gateway(MODEL_ID),
-        // Pixelia only needs a short, constrained grid, so disabling reasoning
+        // Mosaipix only needs a short, constrained grid, so disabling reasoning
         // keeps latency and cost low.
         reasoning: "none",
         temperature: attempt === 0 ? 0.7 : 0.9,
@@ -110,6 +112,7 @@ Tu dois dessiner un vrai sujet : il faut au moins ${minimumForegroundCells} case
 Utilise de grands aplats cohérents, des contours nets et évite le bruit pixel par pixel.
 Ne dessine aucun texte, lettre, chiffre, cadre ou signature.
 Pour les objets connus, respecte leur silhouette caractéristique et leurs couleurs habituelles.
+Donne au motif un nom court en ${locale === "fr" ? "français" : "anglais"}.
 Style demandé : ${styleInstruction}.${attempt === 1 ? " Ta première proposition a été refusée car elle était vide : cette fois, remplis impérativement au moins le quart de la grille avec le sujet demandé." : ""}`,
         prompt: `Dessine en pixel art : ${prompt}. Construis directement le motif dans les lignes indexées, pas une description.`,
       });
@@ -152,7 +155,7 @@ Style demandé : ${styleInstruction}.${attempt === 1 ? " Ta première propositio
   } catch (error) {
     console.error("Pixel-art generation failed", error);
     return Response.json(
-      { error: "Le motif n’a pas pu être créé. Réessaie avec une description plus simple." },
+      { error: locale === "fr" ? "Le motif n’a pas pu être créé. Réessaie avec une description plus simple." : "The pattern could not be created. Try a simpler description." },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }

@@ -1,6 +1,6 @@
-# 🎨 Pixelia — Pixel art à colorier
+# 🎨 Mosaipix — Pixel Art Studio
 
-Pixelia est désormais une application Next.js responsive déployable sur Vercel. Elle permet de partir d'un modèle, d'une image locale ou d'une description textuelle, puis de colorier et exporter le résultat directement dans le navigateur.
+Mosaipix est une application Next.js responsive dédiée au pixel art. Elle permet de partir d'un modèle, d'une image locale ou d'une description textuelle, puis de colorier, personnaliser et exporter le résultat directement dans le navigateur.
 
 ## Développement moderne
 
