@@ -5,8 +5,8 @@ import type { PixelProject } from "@/lib/pixel-art";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-// Qwen provides structured output in non-thinking mode at a very low cost.
-const MODEL_ID = "alibaba/qwen3.7-flash";
+// Gemini Flash Lite is inexpensive and reliable for constrained structured output.
+const MODEL_ID = "google/gemini-2.5-flash-lite";
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT = 5;
 const DETAIL_SIZES = {
@@ -70,7 +70,9 @@ export async function POST(request: Request) {
   const patternSchema = z.object({
     name: z.string().trim().min(1).max(48),
     palette: z.array(z.string().regex(/^#[0-9a-f]{6}$/i)).length(6),
-    rows: z.array(z.string().regex(rowPattern)).length(size),
+    // Some models obey the row width but occasionally return more rows than
+    // requested. We resample vertically below rather than discard a valid motif.
+    rows: z.array(z.string().regex(rowPattern)).min(1).max(32),
   });
 
   const styleInstruction = {
@@ -89,8 +91,8 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < 2 && !output; attempt += 1) {
       const result = await generateText({
         model: gateway(MODEL_ID),
-        // Qwen exposes structured output in non-thinking mode. Pixelia only
-        // needs a short, constrained grid, so this also keeps latency and cost low.
+        // Pixelia only needs a short, constrained grid, so disabling reasoning
+        // keeps latency and cost low.
         reasoning: "none",
         temperature: attempt === 0 ? 0.7 : 0.9,
         maxOutputTokens: 1200,
@@ -123,9 +125,17 @@ Style demandé : ${styleInstruction}.${attempt === 1 ? " Ta première propositio
 
     if (!output) throw new Error("The model returned an empty pixel-art grid.");
 
-    const targets = output.rows.flatMap((row) =>
-      [...row].map((character) => Number(character)),
-    );
+    const targets = Array.from({ length: size }, (_, targetY) => {
+      const sourceY = Math.min(
+        output.rows.length - 1,
+        Math.floor((targetY * output.rows.length) / size),
+      );
+      return [...output.rows[sourceY]].map((character) => Number(character));
+    }).flat();
+    const renderedForegroundCells = targets.filter((cell) => cell !== 0).length;
+    if (renderedForegroundCells < minimumForegroundCells) {
+      throw new Error("The model returned an empty pixel-art grid after resizing.");
+    }
     const project: PixelProject = {
       version: 2,
       name: output.name,
