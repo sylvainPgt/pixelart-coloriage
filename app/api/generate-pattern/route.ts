@@ -5,8 +5,8 @@ import type { PixelProject } from "@/lib/pixel-art";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-// Qwen provides structured output in non-thinking mode at a very low cost.
-const MODEL_ID = "alibaba/qwen3.7-flash";
+// Gemini Flash Lite is inexpensive and reliable for constrained structured output.
+const MODEL_ID = "google/gemini-2.5-flash-lite";
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT = 5;
 const DETAIL_SIZES = {
@@ -91,8 +91,8 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < 2 && !output; attempt += 1) {
       const result = await generateText({
         model: gateway(MODEL_ID),
-        // Qwen exposes structured output in non-thinking mode. Pixelia only
-        // needs a short, constrained grid, so this also keeps latency and cost low.
+        // Pixelia only needs a short, constrained grid, so disabling reasoning
+        // keeps latency and cost low.
         reasoning: "none",
         temperature: attempt === 0 ? 0.7 : 0.9,
         maxOutputTokens: 1200,
