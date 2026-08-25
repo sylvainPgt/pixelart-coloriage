@@ -60,6 +60,7 @@ try {
   await context.setOffline(true);
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator("main").waitFor();
+  await page.evaluate(() => window.dispatchEvent(new Event("offline")));
   await page.getByText("Mode hors connexion", { exact: true }).waitFor();
 
   await page.getByRole("tab", { name: "Un modèle" }).click();

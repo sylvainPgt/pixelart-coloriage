@@ -28,7 +28,8 @@ export default function PwaRegister() {
     const detectOnline = async () => {
       setOnline(await hasNetworkConnection());
     };
-    const handleConnectivityChange = () => void detectOnline();
+    const handleOnline = () => void detectOnline();
+    const handleOffline = () => setOnline(false);
     const userAgent = navigator.userAgent;
     const ipadDesktopMode = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
 
@@ -51,8 +52,8 @@ export default function PwaRegister() {
       setStandalone(true);
     };
 
-    window.addEventListener("online", handleConnectivityChange);
-    window.addEventListener("offline", handleConnectivityChange);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
     window.addEventListener("beforeinstallprompt", handleInstallPrompt);
     window.addEventListener("appinstalled", handleInstalled);
     displayMode.addEventListener("change", detectStandalone);
@@ -82,8 +83,8 @@ export default function PwaRegister() {
 
     return () => {
       languageObserver.disconnect();
-      window.removeEventListener("online", handleConnectivityChange);
-      window.removeEventListener("offline", handleConnectivityChange);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
       window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
       window.removeEventListener("appinstalled", handleInstalled);
       window.removeEventListener("load", register);
