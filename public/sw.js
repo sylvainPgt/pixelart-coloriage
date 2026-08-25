@@ -1,15 +1,34 @@
-const CACHE_NAME = "mosaipix-shell-v1";
-const APP_SHELL = ["/", "/icon.svg", "/og.png", "/manifest.webmanifest"];
+const CACHE_VERSION = "v2";
+const SHELL_CACHE = `mosaipix-shell-${CACHE_VERSION}`;
+const RUNTIME_CACHE = `mosaipix-runtime-${CACHE_VERSION}`;
+const CACHE_NAMES = new Set([SHELL_CACHE, RUNTIME_CACHE]);
+const RUNTIME_LIMIT = 60;
+const APP_SHELL = [
+  "/",
+  "/manifest.webmanifest",
+  "/icon.svg",
+  "/apple-icon.png",
+  "/icons/mosaipix-192.png",
+  "/icons/mosaipix-512.png",
+  "/icons/mosaipix-maskable-512.png",
+];
+
+async function trimRuntimeCache() {
+  const cache = await caches.open(RUNTIME_CACHE);
+  const keys = await cache.keys();
+  const excess = keys.length - RUNTIME_LIMIT;
+  if (excess > 0) await Promise.all(keys.slice(0, excess).map((request) => cache.delete(request)));
+}
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(APP_SHELL)));
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => !CACHE_NAMES.has(key)).map((key) => caches.delete(key))))
       .then(() => self.clients.claim()),
   );
 });
@@ -27,7 +46,7 @@ self.addEventListener("fetch", (event) => {
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            void caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+            void caches.open(SHELL_CACHE).then((cache) => cache.put("/", copy));
           }
           return response;
         })
@@ -41,7 +60,9 @@ self.addEventListener("fetch", (event) => {
       caches.match(request).then((cached) => cached || fetch(request).then((response) => {
         if (response.ok) {
           const copy = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          void caches.open(RUNTIME_CACHE)
+            .then((cache) => cache.put(request, copy))
+            .then(() => trimRuntimeCache());
         }
         return response;
       })),

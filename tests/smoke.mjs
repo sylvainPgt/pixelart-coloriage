@@ -2,7 +2,7 @@ import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright";
 
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+const browser = await chromium.launch(process.env.CI ? { headless: true } : { channel: "chrome", headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const browserErrors = [];
 page.on("pageerror", (error) => browserErrors.push(error.message));
@@ -62,10 +62,15 @@ try {
   const manifestResponse = await page.request.get(`${baseUrl}/manifest.webmanifest`);
   assert(manifestResponse.status() === 200, "Le manifeste de l’application doit être disponible.");
   const manifest = await manifestResponse.json();
-  assert(manifest.display === "standalone" && manifest.icons.length >= 1, "Le manifeste doit permettre l’installation de Mosaipix.");
+  assert(manifest.display === "standalone" && manifest.id === "/", "Le manifeste doit permettre une installation stable de Mosaipix.");
+  assert(manifest.icons.some((icon) => icon.sizes === "192x192" && icon.type === "image/png"), "Le manifeste doit fournir une icône PNG 192 × 192.");
+  assert(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.type === "image/png"), "Le manifeste doit fournir une icône PNG 512 × 512.");
+  assert(manifest.screenshots?.length >= 2, "Le dialogue d’installation doit disposer de captures mobile et ordinateur.");
   const serviceWorkerResponse = await page.request.get(`${baseUrl}/sw.js`);
   assert(serviceWorkerResponse.status() === 200, "Le service worker doit être disponible.");
   assert(serviceWorkerResponse.headers()["cache-control"]?.includes("no-cache"), "Le service worker ne doit pas être servi depuis un cache obsolète.");
+  const serviceWorker = await serviceWorkerResponse.text();
+  assert(serviceWorker.includes('CACHE_VERSION = "v2"') && !serviceWorker.includes('"/og.png"'), "Le cache PWA doit être versionné sans précharger l’image sociale.");
   mkdirSync("artifacts", { recursive: true });
   await page.screenshot({ path: "artifacts/mosaipix-desktop.png", fullPage: false });
   await page.locator(".idea-panel").screenshot({ path: "artifacts/mosaipix-idea-panel.png" });
@@ -153,6 +158,14 @@ try {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.getByRole("button", { name: "Plein écran" }).click();
   await page.locator(".editor-card.editor-focus").waitFor();
+  for (const label of ["Crayon", "Gomme", "Remplir une zone", "Annuler", "Rétablir", "Télécharger le modèle"]) {
+    assert(await page.getByRole("button", { name: label }).count() >= 1, `L’outil mobile ${label} doit avoir un nom accessible.`);
+  }
+  const toolbarFits = await page.evaluate(() => {
+    const bar = document.querySelector(".mobile-editor-bar");
+    return Boolean(bar && bar.scrollWidth <= bar.clientWidth + 1);
+  });
+  assert(toolbarFits, "La barre mobile ne doit plus déborder horizontalement dans son ensemble.");
   await page.getByRole("button", { name: "Ajuster à l’écran" }).click();
   const fittedGrid = await page.evaluate(() => {
     const grid = document.querySelector(".pixel-grid")?.getBoundingClientRect();
@@ -160,6 +173,7 @@ try {
     return Boolean(grid && viewport && grid.width <= viewport.width + 1 && grid.height <= viewport.height + 1);
   });
   assert(fittedGrid, "Ajuster à l’écran doit réellement contenir la grille sur mobile.");
+  await page.screenshot({ path: "artifacts/mosaipix-mobile-editor.png", fullPage: false });
   await page.getByRole("button", { name: "Fermer le plein écran" }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   const layout = await page.evaluate(() => ({ documentWidth: document.documentElement.scrollWidth, viewportWidth: window.innerWidth }));
@@ -170,11 +184,14 @@ try {
   await page.screenshot({ path: "artifacts/mosaipix-mobile.png", fullPage: true });
 
   await page.waitForTimeout(600);
+  await page.setViewportSize({ width: 768, height: 1024 });
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Reprendre" }).waitFor();
   assert(await page.locator(".editor-card").count() === 0, "Un projet sauvegardé doit être proposé sans imposer immédiatement l’éditeur.");
   await page.getByRole("button", { name: "Reprendre" }).click();
-  await page.locator(".editor-card").waitFor();
+  await page.locator(".editor-card.editor-focus").waitFor();
+  assert(await page.locator(".mobile-editor-bar").isVisible(), "La reprise sur tablette doit ouvrir directement une barre tactile compacte.");
+  await page.screenshot({ path: "artifacts/mosaipix-tablet-editor.png", fullPage: false });
 
   console.log("Mosaipix: progressive bilingual creation, saved-project resume, drawing and mobile full-screen layout passed.");
 } finally {
