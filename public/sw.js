@@ -1,10 +1,11 @@
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const SHELL_CACHE = `mosaipix-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `mosaipix-runtime-${CACHE_VERSION}`;
 const CACHE_NAMES = new Set([SHELL_CACHE, RUNTIME_CACHE]);
 const RUNTIME_LIMIT = 60;
 const APP_SHELL = [
-  "/",
+  "/fr",
+  "/en",
   "/manifest.webmanifest",
   "/icon.svg",
   "/apple-icon.png",
@@ -23,7 +24,7 @@ async function trimRuntimeCache() {
 async function precacheAppShell() {
   const cache = await caches.open(SHELL_CACHE);
   await cache.addAll(APP_SHELL);
-  const home = await cache.match("/");
+  const home = await cache.match("/fr");
   if (!home) return;
 
   const html = await home.text();
@@ -60,16 +61,17 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
+    const fallbackPath = url.pathname.startsWith("/en") ? "/en" : "/fr";
     event.respondWith(
       fetch(request)
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            void caches.open(SHELL_CACHE).then((cache) => cache.put("/", copy));
+            void caches.open(SHELL_CACHE).then((cache) => cache.put(fallbackPath, copy));
           }
           return response;
         })
-        .catch(() => caches.match("/").then((cached) => cached || Response.error())),
+        .catch(() => caches.match(fallbackPath).then((cached) => cached || Response.error())),
     );
     return;
   }
