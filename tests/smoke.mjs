@@ -108,6 +108,23 @@ try {
   assert(guideStructuredData["@graph"].some((item) => item["@type"] === "Article") && guideStructuredData["@graph"].some((item) => item["@type"] === "BreadcrumbList"), "Les guides doivent exposer leur article et leur fil d’Ariane aux moteurs.");
   await guidePage.close();
 
+  const trustPage = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: "fr-FR" });
+  await trustPage.goto(`${baseUrl}/fr/confidentialite`, { waitUntil: "domcontentloaded" });
+  await trustPage.getByRole("heading", { level: 1, name: "Tes photos restent sur ton appareil" }).waitFor();
+  assert(await trustPage.locator(".privacy-summary > div").count() === 3, "La confidentialité doit être résumée en trois engagements immédiatement lisibles.");
+  assert((await trustPage.locator('link[rel="canonical"]').getAttribute("href"))?.endsWith("/fr/confidentialite"), "La politique française doit déclarer sa propre URL canonique.");
+  assert(await trustPage.locator('link[rel="alternate"][hreflang="en-US"]').count() === 1, "La politique française doit relier sa version anglaise.");
+  assert(await trustPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "Les pages d’information doivent rester lisibles sans débordement sur mobile.");
+  await trustPage.goto(`${baseUrl}/en/about`, { waitUntil: "domcontentloaded" });
+  await trustPage.getByRole("heading", { level: 1, name: "Pixel art as a pastime, not complicated software" }).waitFor();
+  assert(await trustPage.locator(".contact-card").count() === 1, "La page About doit proposer un appel clair au retour utilisateur.");
+  assert(await trustPage.getByRole("link", { name: /Share feedback/ }).count() >= 1, "La page About doit proposer un bouton de retour fonctionnel.");
+  await trustPage.goto(`${baseUrl}/fr/mentions-legales`, { waitUntil: "domcontentloaded" });
+  await trustPage.getByRole("heading", { level: 1, name: "Mentions légales" }).waitFor();
+  assert(await trustPage.getByText("Osali Studio", { exact: true }).count() === 1, "Les mentions légales doivent identifier l’éditeur.");
+  assert(await trustPage.getByRole("link", { name: "contact@osali.fr", exact: true }).count() === 1, "Les mentions légales doivent donner une adresse de contact.");
+  await trustPage.close();
+
   await page.getByRole("link", { name: "EN", exact: true }).click();
   await page.getByRole("heading", { name: "What do you want to create?" }).waitFor();
   assert(new URL(page.url()).pathname === "/en", "Le lien anglais doit ouvrir une URL dédiée.");
@@ -125,7 +142,8 @@ try {
   const sitemapResponse = await page.request.get(`${baseUrl}/sitemap.xml`);
   const sitemap = await sitemapResponse.text();
   assert(sitemapResponse.ok() && sitemap.includes("https://mosaipix.com/fr") && sitemap.includes("https://mosaipix.com/en") && sitemap.includes("transformer-photo-en-pixel-art") && sitemap.includes("photo-to-pixel-art"), "Le sitemap doit publier les deux langues et leurs guides.");
-  assert((sitemap.match(/<loc>/g) ?? []).length === 8, "Le sitemap doit contenir les deux accueils et les six guides.");
+  assert(sitemap.includes("/fr/confidentialite") && sitemap.includes("/en/privacy") && sitemap.includes("/fr/mentions-legales") && sitemap.includes("/en/about"), "Le sitemap doit publier les pages de confiance dans les deux langues.");
+  assert((sitemap.match(/<loc>/g) ?? []).length === 14, "Le sitemap doit contenir les deux accueils, les six guides et les six pages de confiance.");
   const robotsResponse = await page.request.get(`${baseUrl}/robots.txt`);
   const robots = await robotsResponse.text();
   assert(robotsResponse.ok() && robots.includes("Sitemap: https://mosaipix.com/sitemap.xml"), "robots.txt doit annoncer le sitemap.");

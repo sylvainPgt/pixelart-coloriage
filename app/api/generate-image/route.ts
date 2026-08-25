@@ -123,6 +123,7 @@ No text, letters, numbers, frame, watermark, scenery, split panels, geometric te
 This image will be reduced to a small coloring grid, so favor recognizable shapes over realism.`,
       providerOptions: {
         gateway: {
+          disallowPromptTraining: true,
           user: identifier,
           tags: ["product:mosaipix", "feature:image-generation", `detail:${detail}`],
         },

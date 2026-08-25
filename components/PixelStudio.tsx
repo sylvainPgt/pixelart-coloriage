@@ -14,6 +14,7 @@ import {
 import PixelMiniature from "@/components/PixelMiniature";
 import MobileEditorToolbar from "@/components/MobileEditorToolbar";
 import SiteBrand from "@/components/SiteBrand";
+import SiteFooter from "@/components/SiteFooter";
 import TemplateLibrary from "@/components/TemplateLibrary";
 import { hasNetworkConnection } from "@/lib/connectivity";
 import { findForegroundBounds } from "@/lib/image-crop";
@@ -892,8 +893,9 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
             <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices">{ideaDetails.map(([value, label, dimensions]) => <button type="button" key={value} className={ideaDetail === value ? "active" : ""} aria-pressed={ideaDetail === value} onClick={() => setIdeaDetail(value)}><b>{label}</b><small>{dimensions}</small></button>)}</div></fieldset>
             <button className="primary idea-generate" disabled={generatingIdea}>{generatingIdea ? tr("Mosaipix imagine puis pixelise…", "Mosaipix is imagining and pixelating…") : tr("Créer mon pixel art", "Create my pixel art")}<span aria-hidden="true">→</span></button>
             <p className="ai-note">{ideaRemaining === null
-              ? tr("3 créations IA maximum par adresse réseau et par 24 h. Les images libres restent illimitées.", "Up to 3 AI creations per network address every 24 hours. Open images remain unlimited.")
+              ? tr("Seul le texte de ta demande est envoyé à l’IA, jamais tes photos. 3 créations maximum par adresse réseau et par 24 h.", "Only your written request is sent to AI, never your photos. Up to 3 creations per network address every 24 hours.")
               : tr(`${ideaRemaining} création${ideaRemaining > 1 ? "s" : ""} IA restante${ideaRemaining > 1 ? "s" : ""} pour ces 24 h.`, `${ideaRemaining} AI creation${ideaRemaining === 1 ? "" : "s"} left for these 24 hours.`)}</p>
+            <p className="privacy-detail-link"><Link href={`/${locale}/${isFrench ? "confidentialite" : "privacy"}`}>{tr("Comment tes données sont protégées", "How your data is protected")} →</Link></p>
             {ideaError ? <p className="form-error" role="alert">{ideaError}</p> : null}
             {ideaNotice ? <p className="form-notice" role="status">{ideaNotice}</p> : null}
             <div className="free-image-option">
@@ -991,7 +993,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
       </section>
 
       <section className="how shell" id="how"><div className="section-heading"><span className="eyebrow">{tr("AUSSI SIMPLE QUE ÇA", "IT'S THAT SIMPLE")}</span><h2>{tr("Imagine, crée, colorie", "Imagine, create, color")}</h2></div><div className="steps"><article><div className="step-visual"><span className="step-number">01</span><i>✦</i></div><h3>{tr("Imagine", "Imagine")}</h3><p>{tr("Décris une idée, choisis une photo ou pars d’un modèle.", "Describe an idea, choose a photo, or start from a template.")}</p></article><article><div className="step-visual"><span className="step-number">02</span><i>▦</i></div><h3>{tr("Découvre", "Discover")}</h3><p>{tr("Mosaipix prépare automatiquement une grille pixel art et une palette claires.", "Mosaipix automatically builds a clear pixel-art grid and palette.")}</p></article><article><div className="step-visual"><span className="step-number">03</span><i>✎</i></div><h3>{tr("Colorie", "Color")}</h3><p>{tr("Suis les numéros, personnalise les couleurs et garde ta création.", "Follow the numbers, customize the colors, and save your creation.")}</p></article></div></section>
-      <footer><div className="shell"><a className="brand" href="#top"><SiteBrand /></a><p>{tr("Chaque petit carré a désormais une vraie raison d’être.", "Every little square now has a reason to be.")}</p><span>© 2026 Mosaipix</span></div></footer>
+      <SiteFooter locale={locale} />
     </main>
   );
 }
