@@ -151,7 +151,7 @@ try {
   assert(await page.getByRole("slider", { name: "Nombre précis de couleurs" }).inputValue() === "16", "Le réglage avancé doit accepter une palette de 16 couleurs.");
   await page.getByRole("button", { name: "Simple 12 × 12" }).click();
   await page.getByRole("button", { name: "Créer mon pixel art" }).click();
-  await page.locator(".pixel-grid button").nth(143).waitFor();
+  await page.waitForFunction(() => document.querySelectorAll(".pixel-grid button").length === 144);
   assert(await page.locator(".pixel-grid button").count() === 144, "La grille simple doit contenir 144 cellules.");
   assert(await page.locator(".palette .swatch").count() <= 16, "La palette générée doit respecter la limite avancée demandée.");
 
