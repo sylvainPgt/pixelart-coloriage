@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import PixelStudio from "@/components/PixelStudio";
+import { homeFaqs } from "@/lib/home-content";
 import { SITE_URL } from "@/lib/site-metadata";
 import type { Locale } from "@/lib/templates";
 
@@ -28,6 +29,9 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return {
     title: content.title,
     description: content.description,
+    keywords: locale === "fr"
+      ? ["pixel art à colorier", "photo en pixel art", "pixel art par numéro", "grille pixel art", "pixel art à imprimer"]
+      : ["pixel art coloring pages", "photo to pixel art", "pixel art by number", "pixel art grid", "printable pixel art"],
     alternates: {
       canonical: `/${locale}`,
       languages: {
@@ -60,14 +64,59 @@ export default async function LocalizedHome({ params }: { params: Promise<{ loca
   const content = seo[locale];
   const structuredData = {
     "@context": "https://schema.org",
-    "@type": "WebApplication",
-    name: "Mosaipix",
-    url: `${SITE_URL}/${locale}`,
-    applicationCategory: "GameApplication",
-    operatingSystem: "Any",
-    inLanguage: locale,
-    description: content.description,
-    offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${SITE_URL}/#organization`,
+        name: "Mosaipix",
+        url: SITE_URL,
+        logo: {
+          "@type": "ImageObject",
+          url: `${SITE_URL}/icons/mosaipix-512.png`,
+          width: 512,
+          height: 512,
+        },
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${SITE_URL}/#website`,
+        name: "Mosaipix",
+        url: SITE_URL,
+        description: content.description,
+        inLanguage: ["fr", "en"],
+        publisher: { "@id": `${SITE_URL}/#organization` },
+      },
+      {
+        "@type": "WebApplication",
+        "@id": `${SITE_URL}/#application`,
+        name: "Mosaipix",
+        url: `${SITE_URL}/${locale}`,
+        applicationCategory: "GameApplication",
+        applicationSubCategory: "Pixel art coloring studio",
+        operatingSystem: "Any",
+        browserRequirements: "Requires a modern web browser with JavaScript enabled",
+        inLanguage: locale,
+        description: content.description,
+        image: `${SITE_URL}/og.png`,
+        screenshot: [`${SITE_URL}/screenshots/mosaipix-desktop.jpg`, `${SITE_URL}/screenshots/mosaipix-mobile.jpg`],
+        isAccessibleForFree: true,
+        featureList: locale === "fr"
+          ? ["24 modèles pixel art hors connexion", "Transformation locale de photos", "Grille de coloriage par numéro", "Téléchargement et impression", "Palette de 2 à 20 couleurs"]
+          : ["24 offline pixel art patterns", "Local photo conversion", "Pixel art by number grid", "Download and printing", "2 to 20 color palette"],
+        offers: { "@type": "Offer", price: "0", priceCurrency: "EUR", availability: "https://schema.org/InStock" },
+        publisher: { "@id": `${SITE_URL}/#organization` },
+      },
+      {
+        "@type": "FAQPage",
+        "@id": `${SITE_URL}/${locale}#faq`,
+        inLanguage: locale,
+        mainEntity: homeFaqs[locale].map((item) => ({
+          "@type": "Question",
+          name: item.question,
+          acceptedAnswer: { "@type": "Answer", text: item.answer },
+        })),
+      },
+    ],
   };
 
   return (

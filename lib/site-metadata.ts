@@ -10,6 +10,24 @@ export const baseMetadata: Metadata = {
     template: "%s | Mosaipix",
   },
   description: "Transforme une photo ou une idée en véritable pixel art à colorier et à imprimer.",
+  authors: [{ name: "Mosaipix", url: SITE_URL }],
+  creator: "Mosaipix",
+  publisher: "Mosaipix",
+  category: "Pixel art",
+  referrer: "origin-when-cross-origin",
+  robots: {
+    index: true,
+    follow: true,
+    nocache: false,
+    googleBot: {
+      index: true,
+      follow: true,
+      noimageindex: false,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [

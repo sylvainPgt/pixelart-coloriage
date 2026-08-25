@@ -89,6 +89,25 @@ try {
   assert(await page.locator(".hero-pixel-grid > span").count() === 256, "Le héros doit être un vrai motif 16 × 16.");
   assert(await page.locator(".pixel-heart").count() === 0, "L’ancien cœur vectoriel ne doit plus exister.");
   assert(await page.locator(".step-number").allTextContents().then((steps) => steps.join(",")) === "01,02,03", "Les numéros des étapes doivent être lisibles au premier plan.");
+  assert(await page.locator(".product-facts > div").count() === 4, "Les caractéristiques essentielles doivent être lisibles dans le contenu de la page.");
+  assert(await page.locator(".faq-list details").count() === 5, "La page française doit publier cinq réponses factuelles visibles.");
+  assert(await page.locator(".guide-cards article").count() === 3, "La page d’accueil doit relier trois guides pratiques indexables.");
+  const homeStructuredData = JSON.parse(await page.locator('script[type="application/ld+json"]').textContent());
+  const homeStructuredTypes = homeStructuredData["@graph"].map((item) => item["@type"]);
+  assert(["Organization", "WebSite", "WebApplication", "FAQPage"].every((type) => homeStructuredTypes.includes(type)), "Les données structurées doivent décrire la marque, le site, l’application et la FAQ.");
+
+  const guidePage = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: "fr-FR" });
+  await guidePage.goto(`${baseUrl}/fr/guides/transformer-photo-en-pixel-art`, { waitUntil: "domcontentloaded" });
+  await guidePage.getByRole("heading", { level: 1, name: /Transformer une photo en pixel art/ }).waitFor();
+  assert(await guidePage.title() === "Transformer une photo en pixel art gratuitement | Mosaipix", "Le titre d’un guide ne doit contenir la marque qu’une seule fois.");
+  assert((await guidePage.locator('link[rel="canonical"]').getAttribute("href"))?.endsWith("/fr/guides/transformer-photo-en-pixel-art"), "Chaque guide doit déclarer sa propre URL canonique.");
+  assert(await guidePage.locator('link[rel="alternate"][hreflang="en-US"]').count() === 1, "Chaque guide français doit annoncer son équivalent anglais.");
+  assert(await guidePage.locator(".guide-sections section").count() === 3, "Un guide doit fournir un contenu pratique substantiel et structuré.");
+  assert(await guidePage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "Les guides doivent rester lisibles sans débordement sur mobile.");
+  const guideStructuredData = JSON.parse(await guidePage.locator('script[type="application/ld+json"]').textContent());
+  assert(guideStructuredData["@graph"].some((item) => item["@type"] === "Article") && guideStructuredData["@graph"].some((item) => item["@type"] === "BreadcrumbList"), "Les guides doivent exposer leur article et leur fil d’Ariane aux moteurs.");
+  await guidePage.close();
+
   await page.getByRole("link", { name: "EN", exact: true }).click();
   await page.getByRole("heading", { name: "What do you want to create?" }).waitFor();
   assert(new URL(page.url()).pathname === "/en", "Le lien anglais doit ouvrir une URL dédiée.");
@@ -105,9 +124,12 @@ try {
 
   const sitemapResponse = await page.request.get(`${baseUrl}/sitemap.xml`);
   const sitemap = await sitemapResponse.text();
-  assert(sitemapResponse.ok() && sitemap.includes("https://mosaipix.com/fr") && sitemap.includes("https://mosaipix.com/en"), "Le sitemap doit publier les deux langues.");
+  assert(sitemapResponse.ok() && sitemap.includes("https://mosaipix.com/fr") && sitemap.includes("https://mosaipix.com/en") && sitemap.includes("transformer-photo-en-pixel-art") && sitemap.includes("photo-to-pixel-art"), "Le sitemap doit publier les deux langues et leurs guides.");
+  assert((sitemap.match(/<loc>/g) ?? []).length === 8, "Le sitemap doit contenir les deux accueils et les six guides.");
   const robotsResponse = await page.request.get(`${baseUrl}/robots.txt`);
-  assert(robotsResponse.ok() && (await robotsResponse.text()).includes("Sitemap: https://mosaipix.com/sitemap.xml"), "robots.txt doit annoncer le sitemap.");
+  const robots = await robotsResponse.text();
+  assert(robotsResponse.ok() && robots.includes("Sitemap: https://mosaipix.com/sitemap.xml"), "robots.txt doit annoncer le sitemap.");
+  assert(robots.includes("OAI-SearchBot") && robots.includes("PerplexityBot"), "Les robots de recherche générative doivent être explicitement autorisés.");
 
   await page.getByRole("tab", { name: "Un modèle" }).click();
   await page.getByText("24 MODÈLES HORS LIGNE").waitFor();
