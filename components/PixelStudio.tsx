@@ -13,10 +13,12 @@ import {
 } from "react";
 import PixelMiniature from "@/components/PixelMiniature";
 import MobileEditorToolbar from "@/components/MobileEditorToolbar";
+import SiteBrand from "@/components/SiteBrand";
 import TemplateLibrary from "@/components/TemplateLibrary";
 import { hasNetworkConnection } from "@/lib/connectivity";
 import { findForegroundBounds } from "@/lib/image-crop";
 import { type PixelProject, type Rgb, quantizePixels } from "@/lib/pixel-art";
+import { guideCards, homeFacts, homeFaqs } from "@/lib/home-content";
 import { getLocalizedProjectName, heroTemplate, type Locale } from "@/lib/templates";
 
 type Mode = "templates" | "image" | "text";
@@ -162,19 +164,6 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
-function Brand() {
-  return (
-    <>
-      <span className="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 40 40" shapeRendering="crispEdges">
-          <path d="M4 4h6v32H4zm6 6h6v10h-6zm6 6h6v10h-6zm6-6h6v10h-6zm6-6h6v32h-6z" />
-        </svg>
-      </span>
-      <span className="brand-lockup"><b>Mosaipix</b><small>Pixel Art Studio</small></span>
-    </>
-  );
-}
-
 export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: Locale }) {
   const [locale, setLocale] = useState<Locale>(initialLocale);
   const [mode, setMode] = useState<Mode>("text");
@@ -278,6 +267,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
     : locale === "fr"
       ? `Colonne ${hoveredIndex % project.width + 1}, ligne ${Math.floor(hoveredIndex / project.width) + 1}`
       : `Column ${hoveredIndex % project.width + 1}, row ${Math.floor(hoveredIndex / project.width) + 1}`;
+  const localizedGuides = guideCards[locale];
 
   function clearHistory() {
     setUndoStack([]);
@@ -823,10 +813,11 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
     <main onPointerUp={() => { drawingRef.current = false; }} onPointerLeave={() => { drawingRef.current = false; }}>
       <a className="skip-link" href="#studio">{tr("Aller au studio", "Skip to studio")}</a>
       <nav className="nav shell" aria-label={tr("Navigation principale", "Main navigation")}>
-        <a className="brand" href="#top"><Brand /></a>
+        <a className="brand" href="#top"><SiteBrand /></a>
         <div className="nav-links">
           <a href="#studio">Studio</a>
           <a href="#how">{tr("Comment ça marche", "How it works")}</a>
+          <a href="#faq">FAQ</a>
           <span className="badge">{tr("Gratuit · Sans compte", "Free · No account")}</span>
           <div className="language-switch" role="group" aria-label={tr("Langue", "Language")}>
             <Link href="/fr" hrefLang="fr" className={isFrench ? "active" : ""} aria-current={isFrench ? "page" : undefined} onClick={() => rememberLocale("fr")}>FR</Link>
@@ -980,10 +971,27 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
           <p>{tr("Mosaipix transforme gratuitement une photo, une idée ou l’un de ses 24 modèles en grille de pixel art numérotée. Choisis le niveau de détail et le nombre de couleurs, puis colorie directement dans ton navigateur.", "Mosaipix turns a photo, an idea or one of its 24 patterns into a numbered pixel art grid for free. Choose the level of detail and number of colors, then color directly in your browser.")}</p>
           <p>{tr("Tu peux télécharger le résultat ou imprimer une grille vierge avec sa légende. Tes photos et tes projets restent sur ton appareil, et les modèles continuent de fonctionner hors connexion.", "Download the result or print a blank grid with its color key. Your photos and projects stay on your device, and the pattern library keeps working offline.")}</p>
         </div>
+        <dl className="product-facts" aria-label={tr("Mosaipix en chiffres", "Mosaipix facts")}>
+          {homeFacts[locale].map((fact) => <div key={fact.label}><dt>{fact.value}</dt><dd>{fact.label}</dd></div>)}
+        </dl>
+      </section>
+
+      <section className="guide-library shell" id="guides" aria-labelledby="guide-library-title">
+        <div className="section-heading"><span className="eyebrow">{tr("CONSEILS PRATIQUES", "PRACTICAL GUIDES")}</span><h2 id="guide-library-title">{tr("Réussis ton pixel art du premier coup", "Get your pixel art right the first time")}</h2><p>{tr("Des réponses précises basées sur les vrais réglages du studio.", "Clear answers based on the studio’s actual controls.")}</p></div>
+        <div className="guide-cards">
+          {localizedGuides.map((guide, index) => <article key={guide.key}><span>0{index + 1}</span><h3>{guide.title}</h3><p>{guide.description}</p><Link href={`/${locale}/guides/${guide.slug}`}>{tr("Lire le guide", "Read the guide")} <span aria-hidden="true">→</span></Link></article>)}
+        </div>
+      </section>
+
+      <section className="faq-section shell" id="faq" aria-labelledby="faq-title">
+        <div className="section-heading"><span className="eyebrow">{tr("QUESTIONS FRÉQUENTES", "FREQUENTLY ASKED QUESTIONS")}</span><h2 id="faq-title">{tr("Ce qu’il faut savoir sur Mosaipix", "What to know about Mosaipix")}</h2></div>
+        <div className="faq-list">
+          {homeFaqs[locale].map((item, index) => <details key={item.question} open={index === 0}><summary>{item.question}</summary><p>{item.answer}</p></details>)}
+        </div>
       </section>
 
       <section className="how shell" id="how"><div className="section-heading"><span className="eyebrow">{tr("AUSSI SIMPLE QUE ÇA", "IT'S THAT SIMPLE")}</span><h2>{tr("Imagine, crée, colorie", "Imagine, create, color")}</h2></div><div className="steps"><article><div className="step-visual"><span className="step-number">01</span><i>✦</i></div><h3>{tr("Imagine", "Imagine")}</h3><p>{tr("Décris une idée, choisis une photo ou pars d’un modèle.", "Describe an idea, choose a photo, or start from a template.")}</p></article><article><div className="step-visual"><span className="step-number">02</span><i>▦</i></div><h3>{tr("Découvre", "Discover")}</h3><p>{tr("Mosaipix prépare automatiquement une grille pixel art et une palette claires.", "Mosaipix automatically builds a clear pixel-art grid and palette.")}</p></article><article><div className="step-visual"><span className="step-number">03</span><i>✎</i></div><h3>{tr("Colorie", "Color")}</h3><p>{tr("Suis les numéros, personnalise les couleurs et garde ta création.", "Follow the numbers, customize the colors, and save your creation.")}</p></article></div></section>
-      <footer><div className="shell"><a className="brand" href="#top"><Brand /></a><p>{tr("Chaque petit carré a désormais une vraie raison d’être.", "Every little square now has a reason to be.")}</p><span>© 2026 Mosaipix</span></div></footer>
+      <footer><div className="shell"><a className="brand" href="#top"><SiteBrand /></a><p>{tr("Chaque petit carré a désormais une vraie raison d’être.", "Every little square now has a reason to be.")}</p><span>© 2026 Mosaipix</span></div></footer>
     </main>
   );
 }
