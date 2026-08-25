@@ -48,7 +48,9 @@ try {
     window.dispatchEvent(event);
   });
   await page.locator(".pwa-install-card").waitFor();
-  await page.getByRole("button", { name: "Masquer la proposition d’installation" }).click();
+  const installClose = page.locator(".pwa-install-close");
+  assert(Boolean(await installClose.getAttribute("aria-label")), "La fermeture de la proposition d’installation doit avoir un nom accessible.");
+  await installClose.click();
   await page.locator(".pwa-install-card").waitFor({ state: "hidden" });
 
   let aiRequests = 0;
