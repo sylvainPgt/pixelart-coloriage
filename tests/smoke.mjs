@@ -70,7 +70,7 @@ try {
   assert(serviceWorkerResponse.status() === 200, "Le service worker doit être disponible.");
   assert(serviceWorkerResponse.headers()["cache-control"]?.includes("no-cache"), "Le service worker ne doit pas être servi depuis un cache obsolète.");
   const serviceWorker = await serviceWorkerResponse.text();
-  assert(serviceWorker.includes('CACHE_VERSION = "v2"') && !serviceWorker.includes('"/og.png"'), "Le cache PWA doit être versionné sans précharger l’image sociale.");
+  assert(serviceWorker.includes('CACHE_VERSION = "v3"') && serviceWorker.includes("precacheAppShell") && !serviceWorker.includes('"/og.png"'), "Le cache PWA doit précharger l’application sans l’image sociale.");
   mkdirSync("artifacts", { recursive: true });
   await page.screenshot({ path: "artifacts/mosaipix-desktop.png", fullPage: false });
   await page.locator(".idea-panel").screenshot({ path: "artifacts/mosaipix-idea-panel.png" });

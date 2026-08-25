@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const SHELL_CACHE = `mosaipix-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `mosaipix-runtime-${CACHE_VERSION}`;
 const CACHE_NAMES = new Set([SHELL_CACHE, RUNTIME_CACHE]);
@@ -20,8 +20,27 @@ async function trimRuntimeCache() {
   if (excess > 0) await Promise.all(keys.slice(0, excess).map((request) => cache.delete(request)));
 }
 
+async function precacheAppShell() {
+  const cache = await caches.open(SHELL_CACHE);
+  await cache.addAll(APP_SHELL);
+  const home = await cache.match("/");
+  if (!home) return;
+
+  const html = await home.text();
+  const nextAssets = new Set(
+    [...html.matchAll(/(?:src|href)="(\/_next\/static\/[^\"]+)"/g)].map((match) => match[1]),
+  );
+  await Promise.all([...nextAssets].map(async (asset) => {
+    try {
+      await cache.add(asset);
+    } catch {
+      // One optional asset must not prevent the rest of the app from installing.
+    }
+  }));
+}
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(precacheAppShell());
   self.skipWaiting();
 });
 
