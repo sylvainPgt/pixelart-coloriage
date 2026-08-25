@@ -23,7 +23,7 @@ try {
   const manifestResponse = await page.request.get(`${baseUrl}/manifest.webmanifest`);
   assert(manifestResponse.ok(), "Le manifeste PWA doit être disponible.");
   const manifest = await manifestResponse.json();
-  assert(manifest.id === "/" && manifest.display === "standalone", "Le manifeste doit décrire une application installable stable.");
+  assert(manifest.id === "/" && manifest.start_url === "/fr" && manifest.display === "standalone", "Le manifeste doit décrire une application installable stable en français.");
   assert(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"), "Une icône adaptative 512 × 512 est requise.");
   assert(manifest.screenshots?.some((screenshot) => screenshot.form_factor === "wide"), "Une capture ordinateur est requise pour l’installation.");
   assert(manifest.screenshots?.some((screenshot) => screenshot.form_factor === "narrow"), "Une capture mobile est requise pour l’installation.");

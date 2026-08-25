@@ -1,6 +1,7 @@
 "use client";
 
 import NextImage from "next/image";
+import Link from "next/link";
 import {
   type ChangeEvent,
   type CSSProperties,
@@ -12,16 +13,17 @@ import {
 } from "react";
 import PixelMiniature from "@/components/PixelMiniature";
 import MobileEditorToolbar from "@/components/MobileEditorToolbar";
+import TemplateLibrary from "@/components/TemplateLibrary";
 import { hasNetworkConnection } from "@/lib/connectivity";
 import { findForegroundBounds } from "@/lib/image-crop";
 import { type PixelProject, type Rgb, quantizePixels } from "@/lib/pixel-art";
+import { getLocalizedProjectName, heroTemplate, type Locale } from "@/lib/templates";
 
 type Mode = "templates" | "image" | "text";
 type Tool = "pencil" | "eraser" | "picker" | "fill";
 type CropMode = "cover" | "contain";
 type IdeaStyle = "cute" | "retro" | "minimal";
 type IdeaDetail = "simple" | "classic" | "detailed";
-type Locale = "fr" | "en";
 type CreationSource = "text" | "image" | "template" | "saved";
 type PaintLayer = Array<number | null>;
 type FreeImageSuggestion = {
@@ -83,17 +85,6 @@ const IDEA_GENERATION_SETTINGS: Record<IdeaDetail, { size: number; paletteSize: 
   classic: { size: 24, paletteSize: 8 },
   detailed: { size: 32, paletteSize: 10 },
 };
-const COLOR_SETS = {
-  cream: "#fffaf0",
-  ink: "#18172d",
-  pink: "#ff5c8a",
-  coral: "#ff875c",
-  gold: "#ffd25c",
-  green: "#61d889",
-  blue: "#55c7f3",
-  purple: "#7868e6",
-};
-
 const DEFAULT_IMAGE_SETTINGS: ImageSettings = {
   width: 16,
   height: 16,
@@ -107,64 +98,6 @@ const DEFAULT_IMAGE_SETTINGS: ImageSettings = {
   background: "#ffffff",
   dither: false,
 };
-
-function makeProject(
-  name: string,
-  width: number,
-  height: number,
-  colorAt: (x: number, y: number) => string,
-): PixelProject {
-  const colors = Array.from({ length: width * height }, (_, index) =>
-    colorAt(index % width, Math.floor(index / width)),
-  );
-  const palette = [...new Set(colors)];
-  const paletteMap = new Map(palette.map((color, index) => [color, index]));
-  return {
-    version: 2,
-    name,
-    width,
-    height,
-    palette,
-    targets: colors.map((color) => paletteMap.get(color) ?? 0),
-  };
-}
-
-const rocketProject = makeProject("Fusée cosmique", 16, 16, (x, y) => {
-  const center = Math.abs(x - 7.5);
-  if (y <= 2 && center < y / 2 + 0.6) return COLOR_SETS.gold;
-  if (y > 2 && y < 11 && center < 3.1) {
-    if (y < 5) return COLOR_SETS.coral;
-    if (y === 6 && center < 1.2) return COLOR_SETS.blue;
-    return center > 2.1 ? COLOR_SETS.pink : COLOR_SETS.cream;
-  }
-  if (y >= 8 && y < 12 && center >= 3 && center < 5 - (y - 8) * 0.45) return COLOR_SETS.purple;
-  if (y >= 11 && y < 15 && center < Math.max(0.7, 2.4 - (y - 11) * 0.45)) {
-    return y < 13 ? COLOR_SETS.gold : COLOR_SETS.coral;
-  }
-  if ((x + y * 3) % 19 === 0) return COLOR_SETS.blue;
-  return COLOR_SETS.ink;
-});
-
-const flowerProject = makeProject("Fleur solaire", 14, 14, (x, y) => {
-  const dx = x - 6.5;
-  const dy = y - 6;
-  const distance = Math.hypot(dx, dy);
-  if (distance < 2.1) return COLOR_SETS.gold;
-  if (distance < 4.4 && Math.cos(Math.atan2(dy, dx) * 6) > -0.12) return COLOR_SETS.pink;
-  if (y > 8 && Math.abs(x - 6.5) < 1.2) return COLOR_SETS.green;
-  if (y > 10 && ((x > 3 && x < 7) || (x > 7 && x < 11))) return COLOR_SETS.green;
-  return COLOR_SETS.cream;
-});
-
-const landscapeProject = makeProject("Lac au crépuscule", 18, 12, (x, y) => {
-  if (y < 4) return y < 2 ? COLOR_SETS.purple : COLOR_SETS.pink;
-  if (y === 4 && x > 11 && x < 15) return COLOR_SETS.gold;
-  if (y < 7) return Math.abs(x - 8) < y - 2 ? COLOR_SETS.ink : COLOR_SETS.coral;
-  if (y < 10) return (x + y) % 3 === 0 ? COLOR_SETS.blue : COLOR_SETS.purple;
-  return COLOR_SETS.ink;
-});
-
-const templates = [rocketProject, flowerProject, landscapeProject];
 
 function floodFill(layer: PaintLayer, start: number, replacement: number | null, width: number, height: number) {
   const source = layer[start];
@@ -242,11 +175,11 @@ function Brand() {
   );
 }
 
-export default function PixelStudio() {
-  const [locale, setLocale] = useState<Locale>("fr");
+export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: Locale }) {
+  const [locale, setLocale] = useState<Locale>(initialLocale);
   const [mode, setMode] = useState<Mode>("text");
-  const [project, setProject] = useState<PixelProject>(rocketProject);
-  const [painted, setPainted] = useState<PaintLayer>(() => Array(rocketProject.targets.length).fill(null));
+  const [project, setProject] = useState<PixelProject>(heroTemplate.project);
+  const [painted, setPainted] = useState<PaintLayer>(() => Array(heroTemplate.project.targets.length).fill(null));
   const [selected, setSelected] = useState(1);
   const [tool, setTool] = useState<Tool>("pencil");
   const [prompt, setPrompt] = useState("");
@@ -288,12 +221,9 @@ export default function PixelStudio() {
 
   useEffect(() => {
     try {
-      const savedLocale = localStorage.getItem(LOCALE_KEY);
-      const nextLocale: Locale = savedLocale === "fr" || savedLocale === "en"
-        ? savedLocale
-        : navigator.language.toLowerCase().startsWith("fr") ? "fr" : "en";
-      setLocale(nextLocale);
-      document.documentElement.lang = nextLocale;
+      setLocale(initialLocale);
+      document.documentElement.lang = initialLocale;
+      localStorage.setItem(LOCALE_KEY, initialLocale);
       const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
       if (saved) {
         const data: unknown = JSON.parse(saved);
@@ -312,17 +242,19 @@ export default function PixelStudio() {
     } finally {
       setHydrated(true);
     }
-  }, []);
+  }, [initialLocale]);
 
   useEffect(() => {
     document.body.classList.toggle("editor-expanded", editorExpanded);
     return () => document.body.classList.remove("editor-expanded");
   }, [editorExpanded]);
 
-  function changeLocale(nextLocale: Locale) {
-    setLocale(nextLocale);
-    document.documentElement.lang = nextLocale;
-    localStorage.setItem(LOCALE_KEY, nextLocale);
+  function rememberLocale(nextLocale: Locale) {
+    try {
+      localStorage.setItem(LOCALE_KEY, nextLocale);
+    } catch {
+      // Language navigation remains usable when storage is unavailable.
+    }
   }
 
   useEffect(() => {
@@ -885,11 +817,7 @@ export default function PixelStudio() {
     ["classic", "Classic", "16 × 16"],
     ["detailed", "Detailed", "24 × 24"],
   ];
-  const projectName = isFrench ? project.name : ({
-    "Fusée cosmique": "Cosmic rocket",
-    "Fleur solaire": "Sunny flower",
-    "Lac au crépuscule": "Twilight lake",
-  }[project.name] ?? project.name);
+  const projectName = getLocalizedProjectName(project.name, locale);
 
   return (
     <main onPointerUp={() => { drawingRef.current = false; }} onPointerLeave={() => { drawingRef.current = false; }}>
@@ -901,8 +829,8 @@ export default function PixelStudio() {
           <a href="#how">{tr("Comment ça marche", "How it works")}</a>
           <span className="badge">{tr("Gratuit · Sans compte", "Free · No account")}</span>
           <div className="language-switch" role="group" aria-label={tr("Langue", "Language")}>
-            <button className={isFrench ? "active" : ""} aria-pressed={isFrench} onClick={() => changeLocale("fr")}>FR</button>
-            <button className={!isFrench ? "active" : ""} aria-pressed={!isFrench} onClick={() => changeLocale("en")}>EN</button>
+            <Link href="/fr" hrefLang="fr" className={isFrench ? "active" : ""} aria-current={isFrench ? "page" : undefined} onClick={() => rememberLocale("fr")}>FR</Link>
+            <Link href="/en" hrefLang="en" className={!isFrench ? "active" : ""} aria-current={!isFrench ? "page" : undefined} onClick={() => rememberLocale("en")}>EN</Link>
           </div>
         </div>
       </nav>
@@ -916,9 +844,9 @@ export default function PixelStudio() {
           <small>{tr("✓ Aucun envoi de photo   ✓ Projet sauvegardé localement", "✓ Photos stay private   ✓ Project saved locally")}</small>
         </div>
         <div className="hero-art">
-          <PixelMiniature project={rocketProject} className="hero-pixel-grid" label={tr("Fusée composée de véritables pixels colorés", "Rocket made from real colored pixels")} />
+          <PixelMiniature project={heroTemplate.project} className="hero-pixel-grid" label={tr("Fusée composée de véritables pixels colorés", "Rocket made from real colored pixels")} />
           <div className="pixel-badge badge-top"><b>16 × 16</b><span>{tr("grille réelle", "real grid")}</span></div>
-          <div className="pixel-badge badge-bottom"><b>{rocketProject.palette.length} {tr("couleurs", "colors")}</b><span>{tr("palette maîtrisée", "curated palette")}</span></div>
+          <div className="pixel-badge badge-bottom"><b>{heroTemplate.project.palette.length} {tr("couleurs", "colors")}</b><span>{tr("palette maîtrisée", "curated palette")}</span></div>
         </div>
       </section>
 
@@ -938,11 +866,7 @@ export default function PixelStudio() {
         </div>
 
         <div className="source-panel" id={`panel-${mode}`} role="tabpanel" aria-labelledby={`mode-${mode}`}>
-          {mode === "templates" ? <div className="template-list">{templates.map((item) => (
-            <button key={item.name} className={hasActiveProject && project.name === item.name ? "template active" : "template"} onClick={() => loadProject(item, "template")}>
-              <PixelMiniature project={item} className="template-preview"/><span><b>{isFrench ? item.name : ({ "Fusée cosmique": "Cosmic rocket", "Fleur solaire": "Sunny flower", "Lac au crépuscule": "Twilight lake" }[item.name] ?? item.name)}</b><small>{item.width} × {item.height} · {item.palette.length} {tr("couleurs", "colors")}</small></span>
-            </button>
-          ))}</div> : null}
+          {mode === "templates" ? <TemplateLibrary locale={locale} activeProjectName={hasActiveProject ? project.name : undefined} onSelect={(item) => loadProject(item.project, "template")} /> : null}
 
           {mode === "image" ? <div className="image-workbench">
             <div className="image-source-card">
@@ -1048,6 +972,15 @@ export default function PixelStudio() {
           </section>
         </div> : null}
       </div></section>
+
+      <section className="seo-copy shell" aria-labelledby="seo-copy-title">
+        <span className="eyebrow">{tr("PIXEL ART À COLORIER", "PIXEL ART COLORING")}</span>
+        <h2 id="seo-copy-title">{tr("Crée, colorie et imprime ton pixel art", "Create, color and print your pixel art")}</h2>
+        <div>
+          <p>{tr("Mosaipix transforme gratuitement une photo, une idée ou l’un de ses 24 modèles en grille de pixel art numérotée. Choisis le niveau de détail et le nombre de couleurs, puis colorie directement dans ton navigateur.", "Mosaipix turns a photo, an idea or one of its 24 patterns into a numbered pixel art grid for free. Choose the level of detail and number of colors, then color directly in your browser.")}</p>
+          <p>{tr("Tu peux télécharger le résultat ou imprimer une grille vierge avec sa légende. Tes photos et tes projets restent sur ton appareil, et les modèles continuent de fonctionner hors connexion.", "Download the result or print a blank grid with its color key. Your photos and projects stay on your device, and the pattern library keeps working offline.")}</p>
+        </div>
+      </section>
 
       <section className="how shell" id="how"><div className="section-heading"><span className="eyebrow">{tr("AUSSI SIMPLE QUE ÇA", "IT'S THAT SIMPLE")}</span><h2>{tr("Imagine, crée, colorie", "Imagine, create, color")}</h2></div><div className="steps"><article><div className="step-visual"><span className="step-number">01</span><i>✦</i></div><h3>{tr("Imagine", "Imagine")}</h3><p>{tr("Décris une idée, choisis une photo ou pars d’un modèle.", "Describe an idea, choose a photo, or start from a template.")}</p></article><article><div className="step-visual"><span className="step-number">02</span><i>▦</i></div><h3>{tr("Découvre", "Discover")}</h3><p>{tr("Mosaipix prépare automatiquement une grille pixel art et une palette claires.", "Mosaipix automatically builds a clear pixel-art grid and palette.")}</p></article><article><div className="step-visual"><span className="step-number">03</span><i>✎</i></div><h3>{tr("Colorie", "Color")}</h3><p>{tr("Suis les numéros, personnalise les couleurs et garde ta création.", "Follow the numbers, customize the colors, and save your creation.")}</p></article></div></section>
       <footer><div className="shell"><a className="brand" href="#top"><Brand /></a><p>{tr("Chaque petit carré a désormais une vraie raison d’être.", "Every little square now has a reason to be.")}</p><span>© 2026 Mosaipix</span></div></footer>
