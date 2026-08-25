@@ -11,6 +11,8 @@ import {
   useState,
 } from "react";
 import PixelMiniature from "@/components/PixelMiniature";
+import MobileEditorToolbar from "@/components/MobileEditorToolbar";
+import { hasNetworkConnection } from "@/lib/connectivity";
 import { findForegroundBounds } from "@/lib/image-crop";
 import { type PixelProject, type Rgb, quantizePixels } from "@/lib/pixel-art";
 
@@ -340,7 +342,7 @@ export default function PixelStudio() {
   const progress = correct === 0 ? 0 : Math.max(1, Math.round(correct / project.targets.length * 100));
   const cellSize = Math.max(10, Math.round(32 * zoom / 100));
   const cursorCoordinates = hoveredIndex === null
-    ? locale === "fr" ? "Survole une case" : "Hover over a cell"
+    ? locale === "fr" ? "Sélectionne une case" : "Select a cell"
     : locale === "fr"
       ? `Colonne ${hoveredIndex % project.width + 1}, ligne ${Math.floor(hoveredIndex / project.width) + 1}`
       : `Column ${hoveredIndex % project.width + 1}, row ${Math.floor(hoveredIndex / project.width) + 1}`;
@@ -351,6 +353,10 @@ export default function PixelStudio() {
   }
 
   function revealEditor() {
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      setEditorExpanded(true);
+      return;
+    }
     window.requestAnimationFrame(() => {
       document.querySelector(".editor-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -445,6 +451,10 @@ export default function PixelStudio() {
       setIdeaError(locale === "fr" ? "Décris ton idée en quelques mots." : "Describe your idea in a few words.");
       return;
     }
+    if (!await hasNetworkConnection()) {
+      setIdeaError(locale === "fr" ? "La création IA nécessite Internet. Les modèles et tes photos restent disponibles hors connexion." : "AI creation needs an internet connection. Templates and your photos still work offline.");
+      return;
+    }
 
     setGeneratingIdea(true);
     setIdeaError("");
@@ -510,6 +520,10 @@ export default function PixelStudio() {
     if (cleanPrompt.length < 2) {
       setFreeImageError(locale === "fr" ? "Décris d’abord l’image recherchée." : "Describe the image you want first.");
       promptRef.current?.focus();
+      return false;
+    }
+    if (!await hasNetworkConnection()) {
+      setFreeImageError(locale === "fr" ? "La recherche d’images nécessite Internet. Tu peux utiliser un modèle ou une photo de cet appareil." : "Image search needs an internet connection. You can use a template or a photo from this device.");
       return false;
     }
 
@@ -1002,12 +1016,21 @@ export default function PixelStudio() {
               {creationSource === "image" && sourceDataUrl ? <button disabled={processing} onClick={() => void generateFromImage(sourceDataUrl, sourceName)}>↻ {processing ? tr("Création…", "Creating…") : tr("Recréer avec ces réglages", "Recreate with these settings")}</button> : null}
               {creationSource === "text" || creationSource === "image" ? <button onClick={editCreationSource}>✎ {tr("Modifier la source", "Edit source")}</button> : null}
             </div>
-            <div className="mobile-editor-bar" aria-label={tr("Outils rapides", "Quick tools")}>
-              <button className={tool === "pencil" ? "active" : ""} aria-pressed={tool === "pencil"} onClick={() => setTool("pencil")}>✎ <span>{tr("Crayon", "Pencil")}</span></button>
-              <button className={tool === "eraser" ? "active" : ""} aria-pressed={tool === "eraser"} onClick={() => setTool("eraser")}>◇ <span>{tr("Gomme", "Eraser")}</span></button>
-              <div className="mobile-palette">{project.palette.map((color, index) => <button key={`mobile-${index}-${color}`} className={selected === index ? "selected" : ""} style={{ background: color }} aria-label={`${tr("Couleur", "Color")} ${index + 1}`} aria-pressed={selected === index} onClick={() => { setSelected(index); setTool("pencil"); }}>{index + 1}</button>)}</div>
-              <button disabled={undoStack.length === 0} onClick={undo}>↶ <span>{tr("Annuler", "Undo")}</span></button>
-            </div>
+            <MobileEditorToolbar
+              locale={locale}
+              tool={tool}
+              palette={project.palette}
+              selected={selected}
+              progress={progress}
+              undoDisabled={undoStack.length === 0}
+              redoDisabled={redoStack.length === 0}
+              downloadLabel={filled === 0 ? tr("Télécharger le modèle", "Download the pattern") : tr("Télécharger mon coloriage", "Download my coloring")}
+              onTool={setTool}
+              onColor={(index) => { setSelected(index); setTool("pencil"); }}
+              onUndo={undo}
+              onRedo={redo}
+              onDownload={() => exportPng("current")}
+            />
             <div className="canvas-quick-actions"><button onClick={fitGrid}>{tr("Ajuster à l’écran", "Fit to screen")}</button><button className="expand-editor" onClick={() => setEditorExpanded((current) => !current)}>{editorExpanded ? tr("Fermer le plein écran", "Exit full screen") : tr("Plein écran", "Full screen")}</button><details className="view-settings"><summary>{tr("Affichage", "View")}</summary><div className="view-controls"><div className="zoom-buttons"><button aria-label={tr("Réduire le zoom", "Zoom out")} onClick={() => changeZoom(-10)}>−</button><b>{zoom}%</b><button aria-label={tr("Augmenter le zoom", "Zoom in")} onClick={() => changeZoom(10)}>+</button></div><label>Zoom <input type="range" min="25" max="200" step="5" value={zoom} onChange={(event) => setZoom(Number(event.target.value))}/><b>{zoom}%</b></label><label>{tr("Aide", "Guide")} <input type="range" min="0" max="100" step="5" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))}/><b>{referenceOpacity}%</b></label><label className="toggle"><input type="checkbox" checked={showNumbers} onChange={(event) => setShowNumbers(event.target.checked)}/> {tr("Numéros", "Numbers")}</label><label className="toggle"><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)}/> {tr("Traits", "Grid lines")}</label></div></details></div>
             <div className="coordinate-bar" aria-live="polite">{cursorCoordinates}<span>{tr("Fais défiler pour explorer les grandes grilles.", "Scroll to explore larger grids.")}</span></div>
             <div ref={gridViewportRef} className="pixel-grid-viewport"><div className={`pixel-grid ${showGrid ? "with-grid" : "without-grid"}`} style={gridStyle} role="grid" aria-label={tr("Grille de coloriage", "Coloring grid")} aria-rowcount={project.height} aria-colcount={project.width} onPointerMove={handlePointerMove} onPointerLeave={() => { drawingRef.current = false; setHoveredIndex(null); }}>

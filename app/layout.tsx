@@ -22,6 +22,13 @@ export const metadata: Metadata = {
   title: "Mosaipix — Pixel Art Studio",
   description: "Turn a photo or an idea into real pixel art, then color and customize it online.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/mosaipix-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     title: "Mosaipix",
@@ -43,6 +50,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#604bd8",
+  colorScheme: "light",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

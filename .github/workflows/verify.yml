@@ -1,0 +1,34 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run typecheck
+      - run: npm run test:image-crop
+      - run: npm run test:rate-limit
+      - run: npm run build
+      - name: Start Mosaipix
+        run: |
+          npm start > /tmp/mosaipix.log 2>&1 &
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:3000 > /dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/mosaipix.log
+          exit 1
+      - run: npm run test:e2e
+      - run: npm run test:pwa
