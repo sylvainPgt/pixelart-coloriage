@@ -58,10 +58,13 @@ try {
     if (request.url().includes("/api/generate-image")) aiRequests += 1;
   });
   await context.setOffline(true);
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.locator("main").waitFor();
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
   await page.getByText("Mode hors connexion", { exact: true }).waitFor();
+
+  const offlinePage = await context.newPage();
+  await offlinePage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await offlinePage.locator("main").waitFor();
+  await offlinePage.close();
 
   await page.getByRole("tab", { name: "Un modèle" }).click();
   await page.getByRole("button", { name: /Fusée cosmique/ }).click();
