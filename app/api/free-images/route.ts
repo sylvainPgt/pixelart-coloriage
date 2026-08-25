@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { generateText, gateway } from "ai";
 import { z } from "zod";
 
@@ -83,9 +84,12 @@ function isRateLimited(identifier: string) {
 }
 
 function clientIdentifier(request: Request) {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+  const address = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
     || request.headers.get("x-real-ip")
     || "local";
+  return createHash("sha256")
+    .update(`${process.env.VERCEL_PROJECT_ID ?? "mosaipix"}:${address}`)
+    .digest("hex");
 }
 
 function safeText(value: unknown, fallback: string, maxLength = 120) {
@@ -138,6 +142,12 @@ async function searchQuery(prompt: string, locale: "fr" | "en") {
       maxOutputTokens: 40,
       system: "Translate the request into 2 to 6 concise English image-search keywords. Return only the keywords, without quotes or explanation.",
       prompt,
+      providerOptions: {
+        gateway: {
+          disallowPromptTraining: true,
+          tags: ["product:mosaipix", "feature:image-search-translation"],
+        },
+      },
     });
     const translated = result.text.replace(/[^a-zA-Z0-9 -]/g, " ").replace(/\s+/g, " ").trim();
     return translated.slice(0, 80) || prompt;

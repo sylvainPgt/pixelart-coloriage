@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import SiteBrand from "@/components/SiteBrand";
+import SiteFooter from "@/components/SiteFooter";
 import { getGuide, getGuideByKey, getLocalizedGuides, guides } from "@/lib/seo-content";
 import { SITE_URL } from "@/lib/site-metadata";
 import type { Locale } from "@/lib/templates";
@@ -146,7 +147,7 @@ export default async function GuidePage({ params }: { params: Promise<GuideParam
         </div>
       </article>
 
-      <footer><div className="shell"><Link className="brand" href={`/${locale}`}><SiteBrand /></Link><p>{locale === "fr" ? "Crée, colorie et imprime ton pixel art." : "Create, color and print your pixel art."}</p><span>© 2026 Mosaipix</span></div></footer>
+      <SiteFooter locale={locale} />
     </main>
   );
 }

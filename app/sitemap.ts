@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getGuideByKey, guides } from "@/lib/seo-content";
 import { SITE_URL } from "@/lib/site-metadata";
+import { getTrustPageByKey, getTrustPages } from "@/lib/trust-content";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const homepages: MetadataRoute.Sitemap = ["fr", "en"].map((locale) => ({
@@ -35,5 +36,23 @@ export default function sitemap(): MetadataRoute.Sitemap {
     };
   });
 
-  return [...homepages, ...guidePages];
+  const trustPages: MetadataRoute.Sitemap = getTrustPages().map((page) => {
+    const frenchPage = getTrustPageByKey("fr", page.key);
+    const englishPage = getTrustPageByKey("en", page.key);
+    return {
+      url: `${SITE_URL}/${page.locale}/${page.slug}`,
+      lastModified: new Date("2026-08-26"),
+      changeFrequency: "yearly" as const,
+      priority: page.key === "about" ? 0.55 : 0.35,
+      alternates: {
+        languages: {
+          "fr-FR": `${SITE_URL}/fr/${frenchPage?.slug}`,
+          "en-US": `${SITE_URL}/en/${englishPage?.slug}`,
+          "x-default": `${SITE_URL}/${page.key === "about" ? `en/${englishPage?.slug}` : `fr/${frenchPage?.slug}`}`,
+        },
+      },
+    };
+  });
+
+  return [...homepages, ...guidePages, ...trustPages];
 }
