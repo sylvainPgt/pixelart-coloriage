@@ -8,6 +8,7 @@ const launchOptions = process.env.CI
 const browser = await chromium.launch(launchOptions);
 const context = await browser.newContext({
   viewport: { width: 1024, height: 768 },
+  locale: "fr-FR",
   serviceWorkers: "allow",
 });
 const page = await context.newPage();
