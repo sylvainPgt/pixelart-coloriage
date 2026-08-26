@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Mosaipix</string>
+    <string name="title_activity_main">Mosaipix</string>
+    <string name="package_name">com.osalistudio.mosaipix</string>
+    <string name="custom_url_scheme">com.osalistudio.mosaipix</string>
+</resources>
