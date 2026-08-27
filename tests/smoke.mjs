@@ -41,6 +41,10 @@ try {
   assert(await studio.getByRole("gridcell").count() === 0, "La grille ne doit plus créer des milliers d’éléments HTML.");
   assert(await studio.getByRole("button", { name: "Agrandir" }).count() === 1, "Le zoom doit être accessible sur mobile.");
   assert(await studio.getByRole("button", { name: "Déplacer" }).count() >= 1, "Le déplacement de la grille doit être disponible.");
+  const coloringCanvas = studio.getByRole("application", { name: /Grille de coloriage 16 par 16/ });
+  await coloringCanvas.focus();
+  await coloringCanvas.press("Space");
+  await studio.getByRole("application", { name: /1 couleur incorrecte/ }).waitFor();
 
   const photo = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: "fr-FR" });
   photo.on("pageerror", (error) => browserErrors.push(error.message));

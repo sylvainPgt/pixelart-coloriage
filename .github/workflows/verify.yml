@@ -19,6 +19,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
       - run: npm run test:image-crop
+      - run: npm run test:crop-geometry
       - run: npm run test:rate-limit
       - run: npm run build
       - name: Start Mosaipix

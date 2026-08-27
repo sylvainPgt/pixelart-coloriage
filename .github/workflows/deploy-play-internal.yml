@@ -1,0 +1,91 @@
+name: Deploy Android to Play internal testing
+
+on:
+  workflow_run:
+    workflows: [Verify]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: play-internal-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Synchronize the Android wrapper
+        run: npx cap sync android
+
+      - name: Set a unique Play Store version
+        shell: bash
+        run: |
+          echo "ANDROID_VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "ANDROID_VERSION_NAME=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Restore the upload key
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/mosaipix-upload.keystore
+          {
+            echo "storeFile=mosaipix-upload.keystore"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/signing.properties
+
+      - name: Build the signed Android App Bundle
+        working-directory: android
+        run: ./gradlew bundleRelease --no-daemon
+
+      - name: Upload to the Play Store internal track
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.osalistudio.mosaipix
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          tracks: internal
+          status: completed
+          releaseName: Mosaipix 1.0.${{ github.run_number }}
+
+      - name: Keep the bundle as a workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mosaipix-${{ github.event.workflow_run.head_sha }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: ignore
+          retention-days: 14

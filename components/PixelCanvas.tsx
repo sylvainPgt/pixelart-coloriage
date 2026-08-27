@@ -47,6 +47,10 @@ export default function PixelCanvas({
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [keyboardCell, setKeyboardCell] = useState(0);
   const isFrench = locale === "fr";
+  const incorrectCount = painted.reduce<number>(
+    (count, paintedIndex, index) => count + (paintedIndex !== null && paintedIndex !== project.targets[index] ? 1 : 0),
+    0,
+  );
 
   const fit = useCallback(() => {
     const host = hostRef.current;
@@ -124,6 +128,13 @@ export default function PixelCanvas({
         context.lineWidth = 1 / zoom;
         context.strokeRect(x, y, CELL, CELL);
       }
+      if (paintedIndex !== null && paintedIndex !== target && zoom * CELL >= 10) {
+        context.fillStyle = "#b3203f";
+        context.font = "900 12px system-ui, sans-serif";
+        context.textAlign = "right";
+        context.textBaseline = "bottom";
+        context.fillText("×", x + CELL - 3, y + CELL - 2);
+      }
     }
     const keyboardX = (keyboardCell % project.width) * CELL;
     const keyboardY = Math.floor(keyboardCell / project.width) * CELL;
@@ -175,7 +186,9 @@ export default function PixelCanvas({
         ref={canvasRef}
         className={`pixel-canvas tool-${tool}`}
         role="application"
-        aria-label={isFrench ? `Grille de coloriage ${project.width} par ${project.height}` : `${project.width} by ${project.height} coloring grid`}
+        aria-label={isFrench
+          ? `Grille de coloriage ${project.width} par ${project.height}${incorrectCount > 0 ? `, ${incorrectCount} couleur incorrecte${incorrectCount > 1 ? "s" : ""}` : ""}`
+          : `${project.width} by ${project.height} coloring grid${incorrectCount > 0 ? `, ${incorrectCount} incorrect color${incorrectCount > 1 ? "s" : ""}` : ""}`}
         tabIndex={0}
         onKeyDown={(event) => {
           let next = keyboardCell;
