@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Mosaipix",
     description: "Transforme une idée ou une photo en pixel art à colorier.",
     id: "/",
-    start_url: "/fr",
+    start_url: "/fr/studio",
     scope: "/",
     display: "standalone",
     orientation: "any",

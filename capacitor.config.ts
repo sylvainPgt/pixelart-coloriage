@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "Mosaipix",
   webDir: "mobile-shell",
   server: {
-    url: "https://mosaipix.com/fr",
+    url: "https://mosaipix.com/fr/studio",
     cleartext: false,
     allowNavigation: ["mosaipix.com", "*.mosaipix.com"],
   },

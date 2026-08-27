@@ -1,4 +1,4 @@
-type EditorTool = "pencil" | "eraser" | "picker" | "fill";
+type EditorTool = "pan" | "pencil" | "eraser" | "picker" | "fill";
 
 type MobileEditorToolbarProps = {
   locale: "fr" | "en";
@@ -36,6 +36,7 @@ export default function MobileEditorToolbar({
   return (
     <div className="mobile-editor-bar" aria-label={tr("Outils rapides", "Quick tools")}>
       <div className="mobile-tool-row">
+        <button className={tool === "pan" ? "active" : ""} aria-label={tr("Déplacer la grille", "Pan the grid")} aria-pressed={tool === "pan"} onClick={() => onTool("pan")}><span aria-hidden="true">✋</span></button>
         <button className={tool === "pencil" ? "active" : ""} aria-label={tr("Crayon", "Pencil")} aria-pressed={tool === "pencil"} onClick={() => onTool("pencil")}><span aria-hidden="true">✎</span></button>
         <button className={tool === "eraser" ? "active" : ""} aria-label={tr("Gomme", "Eraser")} aria-pressed={tool === "eraser"} onClick={() => onTool("eraser")}><span aria-hidden="true">◇</span></button>
         <button className={tool === "fill" ? "active" : ""} aria-label={tr("Remplir une zone", "Fill an area")} aria-pressed={tool === "fill"} onClick={() => onTool("fill")}><span aria-hidden="true">▰</span></button>

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const SHELL_CACHE = `mosaipix-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `mosaipix-runtime-${CACHE_VERSION}`;
 const CACHE_NAMES = new Set([SHELL_CACHE, RUNTIME_CACHE]);
@@ -6,6 +6,8 @@ const RUNTIME_LIMIT = 60;
 const APP_SHELL = [
   "/fr",
   "/en",
+  "/fr/studio",
+  "/en/studio",
   "/manifest.webmanifest",
   "/icon.svg",
   "/apple-icon.png",
@@ -24,12 +26,10 @@ async function trimRuntimeCache() {
 async function precacheAppShell() {
   const cache = await caches.open(SHELL_CACHE);
   await cache.addAll(APP_SHELL);
-  const home = await cache.match("/fr");
-  if (!home) return;
-
-  const html = await home.text();
+  const pages = await Promise.all([cache.match("/fr"), cache.match("/fr/studio")]);
   const nextAssets = new Set(
-    [...html.matchAll(/(?:src|href)="(\/_next\/static\/[^\"]+)"/g)].map((match) => match[1]),
+    (await Promise.all(pages.filter(Boolean).map((page) => page.text())))
+      .flatMap((html) => [...html.matchAll(/(?:src|href)="(\/_next\/static\/[^\"]+)"/g)].map((match) => match[1])),
   );
   await Promise.all([...nextAssets].map(async (asset) => {
     try {
@@ -61,17 +61,22 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    const fallbackPath = url.pathname.startsWith("/en") ? "/en" : "/fr";
+    const localePath = url.pathname.startsWith("/en") ? "/en" : "/fr";
+    const pagePath = url.pathname.startsWith("/en/studio")
+      ? "/en/studio"
+      : url.pathname.startsWith("/fr/studio")
+        ? "/fr/studio"
+        : localePath;
     event.respondWith(
       fetch(request)
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            void caches.open(SHELL_CACHE).then((cache) => cache.put(fallbackPath, copy));
+            void caches.open(SHELL_CACHE).then((cache) => cache.put(pagePath, copy));
           }
           return response;
         })
-        .catch(() => caches.match(fallbackPath).then((cached) => cached || Response.error())),
+        .catch(() => caches.match(pagePath).then((cached) => cached || caches.match(localePath)).then((cached) => cached || Response.error())),
     );
     return;
   }

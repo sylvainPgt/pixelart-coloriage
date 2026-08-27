@@ -8,6 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:image-crop": "node --experimental-strip-types tests/image-crop.test.mts",
+    "test:crop-geometry": "node --experimental-strip-types tests/crop-geometry.test.mts",
     "test:rate-limit": "node --experimental-strip-types tests/rate-limit.test.mts",
     "test:e2e": "node tests/smoke.mjs",
     "test:pwa": "node tests/pwa.mjs",

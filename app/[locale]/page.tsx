@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import PixelStudio from "@/components/PixelStudio";
+import LandingPage from "@/components/LandingPage";
 import { homeFaqs } from "@/lib/home-content";
 import { SITE_URL } from "@/lib/site-metadata";
 import type { Locale } from "@/lib/templates";
@@ -122,7 +122,7 @@ export default async function LocalizedHome({ params }: { params: Promise<{ loca
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }} />
-      <PixelStudio initialLocale={locale} />
+      <LandingPage locale={locale} />
     </>
   );
 }

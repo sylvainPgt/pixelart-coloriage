@@ -36,6 +36,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
     };
   });
 
+  const studioPages: MetadataRoute.Sitemap = ["fr", "en"].map((locale) => ({
+    url: `${SITE_URL}/${locale}/studio`,
+    lastModified: new Date("2026-08-27"),
+    changeFrequency: "weekly" as const,
+    priority: 0.9,
+    alternates: {
+      languages: {
+        "fr-FR": `${SITE_URL}/fr/studio`,
+        "en-US": `${SITE_URL}/en/studio`,
+        "x-default": `${SITE_URL}/fr/studio`,
+      },
+    },
+  }));
+
   const trustPages: MetadataRoute.Sitemap = getTrustPages().map((page) => {
     const frenchPage = getTrustPageByKey("fr", page.key);
     const englishPage = getTrustPageByKey("en", page.key);
@@ -54,5 +68,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     };
   });
 
-  return [...homepages, ...guidePages, ...trustPages];
+  return [...homepages, ...studioPages, ...guidePages, ...trustPages];
 }
