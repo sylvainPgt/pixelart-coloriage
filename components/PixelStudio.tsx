@@ -5,14 +5,17 @@ import Link from "next/link";
 import {
   type ChangeEvent,
   type KeyboardEvent,
+  useCallback,
   useEffect,
   useReducer,
   useRef,
   useState,
 } from "react";
 import ImageCropper from "@/components/ImageCropper";
+import ExportSheet from "@/components/ExportSheet";
 import PixelMiniature from "@/components/PixelMiniature";
 import PixelCanvas from "@/components/PixelCanvas";
+import PixelRenderPreview from "@/components/PixelRenderPreview";
 import MobileEditorToolbar from "@/components/MobileEditorToolbar";
 import TemplateLibrary from "@/components/TemplateLibrary";
 import { hasNetworkConnection } from "@/lib/connectivity";
@@ -29,6 +32,7 @@ type CreationSource = "text" | "image" | "template" | "saved";
 type WorkflowStep = "source" | "crop" | "settings" | "editor";
 type GridFormat = "square" | "portrait" | "landscape" | "custom";
 type GridDetail = "simple" | "classic" | "detailed";
+type RenderPreviewMode = "pixel" | "original";
 type PaintLayer = Array<number | null>;
 type FreeImageSuggestion = {
   id: string;
@@ -184,6 +188,54 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
+async function createPixelProject(dataUrl: string, name: string, settings: ImageSettings, errorMessage: string): Promise<PixelProject> {
+  const image = await loadBrowserImage(dataUrl, errorMessage);
+  const canvas = document.createElement("canvas");
+  canvas.width = settings.width;
+  canvas.height = settings.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error(errorMessage);
+
+  context.fillStyle = settings.background;
+  context.fillRect(0, 0, settings.width, settings.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.filter = `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturation}%)`;
+
+  const cropWidth = image.width;
+  const cropHeight = image.height;
+  if (settings.cropMode === "cover") {
+    const selectedCrop = getCropRect(cropWidth, cropHeight, settings.width / settings.height, {
+      focusX: settings.focusX,
+      focusY: settings.focusY,
+      zoom: settings.cropZoom,
+    });
+    context.drawImage(image, selectedCrop.x, selectedCrop.y, selectedCrop.width, selectedCrop.height, 0, 0, settings.width, settings.height);
+  } else {
+    const scale = Math.min(settings.width / cropWidth, settings.height / cropHeight);
+    const drawWidth = cropWidth * scale;
+    const drawHeight = cropHeight * scale;
+    context.drawImage(image, 0, 0, cropWidth, cropHeight, (settings.width - drawWidth) / 2, (settings.height - drawHeight) / 2, drawWidth, drawHeight);
+  }
+  context.filter = "none";
+
+  const data = context.getImageData(0, 0, settings.width, settings.height).data;
+  const pixels: Rgb[] = Array.from({ length: settings.width * settings.height }, (_, index) => [
+    data[index * 4],
+    data[index * 4 + 1],
+    data[index * 4 + 2],
+  ]);
+  const quantized = quantizePixels(pixels, settings.width, settings.paletteSize, settings.dither);
+  return {
+    version: 2,
+    name,
+    width: settings.width,
+    height: settings.height,
+    palette: quantized.palette,
+    targets: quantized.indices,
+  };
+}
+
 export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: Locale }) {
   const [locale, setLocale] = useState<Locale>(initialLocale);
   const [workflow, dispatchWorkflow] = useReducer(workflowReducer, { mode: "text", step: "source" });
@@ -222,9 +274,15 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
   const [creationSource, setCreationSource] = useState<CreationSource | null>(null);
   const [gridFormat, setGridFormat] = useState<GridFormat>("square");
   const [gridDetail, setGridDetail] = useState<GridDetail>("classic");
+  const [previewMode, setPreviewMode] = useState<RenderPreviewMode>("pixel");
+  const [previewProject, setPreviewProject] = useState<PixelProject | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [saveState, setSaveState] = useState<"saving" | "saved">("saved");
   const fileRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLInputElement>(null);
   const hasActiveProject = workflow.step === "editor";
+  const closeExport = useCallback(() => setExportOpen(false), []);
 
   function setMode(nextMode: Mode) {
     dispatchWorkflow({ type: "mode", mode: nextMode });
@@ -235,6 +293,15 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
     setGridFormat(format);
     setGridDetail(detail);
     setImageSettings((current) => ({ ...current, width, height }));
+  }
+
+  function applyDetailPreset(detail: GridDetail) {
+    const format = gridFormat === "custom"
+      ? imageSettings.width === imageSettings.height
+        ? "square"
+        : imageSettings.width > imageSettings.height ? "landscape" : "portrait"
+      : gridFormat;
+    applyGridPreset(format, detail);
   }
 
   useEffect(() => {
@@ -264,15 +331,41 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
 
   useEffect(() => {
     if (!hydrated || !shouldPersistProject) return;
+    setSaveState("saving");
     const timeout = window.setTimeout(() => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ project, painted }));
+        setSaveState("saved");
       } catch {
         // A full localStorage should never interrupt drawing.
       }
     }, 450);
     return () => window.clearTimeout(timeout);
   }, [hydrated, painted, project, shouldPersistProject]);
+
+  useEffect(() => {
+    if (workflow.step !== "settings" || !sourceDataUrl) return;
+    let cancelled = false;
+    setPreviewLoading(true);
+    const timeout = window.setTimeout(() => {
+      void createPixelProject(
+        sourceDataUrl,
+        sourceName,
+        imageSettings,
+        locale === "fr" ? "Impossible de préparer l’aperçu." : "The preview could not be prepared.",
+      ).then((nextProject) => {
+        if (!cancelled) setPreviewProject(nextProject);
+      }).catch((error: unknown) => {
+        if (!cancelled) setImageError(error instanceof Error ? error.message : locale === "fr" ? "Impossible de préparer l’aperçu." : "The preview could not be prepared.");
+      }).finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+    }, 140);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [imageSettings, locale, sourceDataUrl, sourceName, workflow.step]);
 
   const filled = painted.reduce<number>((total, value) => total + (value === null ? 0 : 1), 0);
   const correct = painted.reduce<number>((total, value, index) => total + (value === project.targets[index] ? 1 : 0), 0);
@@ -506,74 +599,13 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
     setProcessing(true);
     setImageError("");
     try {
-      const image = await loadBrowserImage(dataUrl, locale === "fr" ? "Impossible de lire cette image." : "This image could not be read.");
-      const canvas = document.createElement("canvas");
-      canvas.width = settings.width;
-      canvas.height = settings.height;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      if (!context) throw new Error(locale === "fr" ? "Le navigateur ne permet pas de préparer l’image." : "Your browser could not process this image.");
-
-      context.fillStyle = settings.background;
-      context.fillRect(0, 0, settings.width, settings.height);
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = "high";
-      context.filter = `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturation}%)`;
-
-      const cropX = 0;
-      const cropY = 0;
-      const cropWidth = image.width;
-      const cropHeight = image.height;
-      const targetRatio = settings.width / settings.height;
-      if (settings.cropMode === "cover") {
-        const selectedCrop = getCropRect(cropWidth, cropHeight, targetRatio, {
-          focusX: settings.focusX,
-          focusY: settings.focusY,
-          zoom: settings.cropZoom,
-        });
-        context.drawImage(
-          image,
-          cropX + selectedCrop.x,
-          cropY + selectedCrop.y,
-          selectedCrop.width,
-          selectedCrop.height,
-          0,
-          0,
-          settings.width,
-          settings.height,
-        );
-      } else {
-        const scale = Math.min(settings.width / cropWidth, settings.height / cropHeight);
-        const drawWidth = cropWidth * scale;
-        const drawHeight = cropHeight * scale;
-        context.drawImage(
-          image,
-          cropX,
-          cropY,
-          cropWidth,
-          cropHeight,
-          (settings.width - drawWidth) / 2,
-          (settings.height - drawHeight) / 2,
-          drawWidth,
-          drawHeight,
-        );
-      }
-      context.filter = "none";
-
-      const data = context.getImageData(0, 0, settings.width, settings.height).data;
-      const pixels: Rgb[] = Array.from({ length: settings.width * settings.height }, (_, index) => [
-        data[index * 4],
-        data[index * 4 + 1],
-        data[index * 4 + 2],
-      ]);
-      const quantized = quantizePixels(pixels, settings.width, settings.paletteSize, settings.dither);
-      loadProject({
-        version: 2,
+      const nextProject = await createPixelProject(
+        dataUrl,
         name,
-        width: settings.width,
-        height: settings.height,
-        palette: quantized.palette,
-        targets: quantized.indices,
-      }, source);
+        settings,
+        locale === "fr" ? "Impossible de lire cette image." : "This image could not be read.",
+      );
+      loadProject(nextProject, source);
       return true;
     } catch (error) {
       setImageError(error instanceof Error ? error.message : locale === "fr" ? "La génération a échoué." : "Generation failed.");
@@ -706,15 +738,85 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
   function exportPng(exportMode: "current" | "complete" | "printable") {
     const exported = createExportDataUrl(exportMode);
     if (!exported) return;
+    downloadDataUrl(exported.dataUrl, `${project.name || "mosaipix"}-${exported.resolvedMode}.png`);
+  }
+
+  function downloadDataUrl(dataUrl: string, filename: string) {
     const link = document.createElement("a");
-    link.download = `${project.name || "mosaipix"}-${exported.resolvedMode}.png`;
-    link.href = exported.dataUrl;
+    link.download = filename;
+    link.href = dataUrl;
     link.click();
+  }
+
+  function dataUrlToFile(dataUrl: string, filename: string) {
+    const [metadata, encoded] = dataUrl.split(",");
+    const mimeType = metadata.match(/^data:([^;]+)/)?.[1] ?? "image/png";
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return new File([bytes], filename, { type: mimeType });
+  }
+
+  async function shareWithNativeApp(dataUrl: string, filename: string, text: string) {
+    const capacitorWindow = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
+    if (!capacitorWindow.Capacitor?.isNativePlatform?.()) return false;
+    try {
+      const [{ Directory, Filesystem }, { Share }] = await Promise.all([
+        import("@capacitor/filesystem"),
+        import("@capacitor/share"),
+      ]);
+      const safeFilename = filename.replace(/[^a-zA-Z0-9._-]+/g, "-");
+      const data = dataUrl.split(",")[1];
+      const saved = await Filesystem.writeFile({
+        path: `exports/${safeFilename}`,
+        data,
+        directory: Directory.Cache,
+        recursive: true,
+      });
+      await Share.share({
+        title: projectName,
+        text,
+        url: saved.uri,
+        dialogTitle: tr("Enregistrer, imprimer ou partager", "Save, print, or share"),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function saveOrSharePng(exportMode: "current" | "complete" | "printable") {
+    const exported = createExportDataUrl(exportMode);
+    if (!exported) return;
+    const filename = `${project.name || "mosaipix"}-${exported.resolvedMode}.png`;
+    const shareText = exportMode === "printable"
+      ? tr("Grille Mosaipix prête à imprimer", "Mosaipix grid ready to print")
+      : tr("Ma création Mosaipix", "My Mosaipix creation");
+    if (await shareWithNativeApp(exported.dataUrl, filename, shareText)) return;
+    const file = dataUrlToFile(exported.dataUrl, filename);
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: projectName,
+          text: shareText,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+    downloadDataUrl(exported.dataUrl, filename);
   }
 
   function printPrintableGrid() {
     const exported = createExportDataUrl("printable");
     if (!exported) return;
+    const capacitorWindow = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
+    if (capacitorWindow.Capacitor?.isNativePlatform?.() || /Android/i.test(navigator.userAgent)) {
+      void saveOrSharePng("printable");
+      return;
+    }
     const printWindow = window.open("", "mosaipix-print", "width=900,height=1100");
     if (!printWindow) {
       exportPng("printable");
@@ -808,6 +910,11 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
     ["classic", tr("Classique", "Classic")],
     ["detailed", tr("Détaillé", "Detailed")],
   ];
+  const previewCells = imageSettings.width * imageSettings.height;
+  const previewComplexity = previewCells * Math.max(1, imageSettings.paletteSize / 4);
+  const previewDifficulty = previewComplexity <= 900
+    ? tr("facile", "easy")
+    : previewComplexity <= 3000 ? tr("équilibré", "balanced") : tr("expert", "expert");
 
   return (
     <main className={`studio-app step-${workflow.step}`}>
@@ -889,11 +996,32 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
         </div> : null}
 
         {workflow.step === "settings" && sourceDataUrl ? <div className="studio-step settings-step">
-          <header className="studio-step-heading"><span className="eyebrow">{tr("ÉTAPE 3", "STEP 3")}</span><h1>{tr("Choisis le rendu", "Choose the result")}</h1><p>{tr("Commence simplement. Les réglages précis restent disponibles si tu en as besoin.", "Start simple. Precise settings remain available if you need them.")}</p></header>
-          <div className="settings-layout">
-            <div className="settings-preview"><ImageCropper dataUrl={sourceDataUrl} name={sourceName} ratio={imageSettings.width / imageSettings.height} locale={locale} transform={{ focusX: imageSettings.focusX, focusY: imageSettings.focusY, zoom: imageSettings.cropZoom }} onChange={(next) => setImageSettings((current) => ({ ...current, focusX: next.focusX, focusY: next.focusY, cropZoom: next.zoom }))}/></div>
-            <div className="image-controls simple-panel">
-              <div className="settings-summary"><b>{imageSettings.width} × {imageSettings.height}</b><span>{imageSettings.paletteSize} {tr("couleurs", "colors")}</span></div>
+          <header className="studio-step-heading"><span className="eyebrow">{tr("ÉTAPE 3", "STEP 3")}</span><h1>{tr("Prévisualise et ajuste", "Preview and adjust")}</h1><p>{tr("Le rendu ci-dessous est le vrai pixel art. Chaque réglage est visible immédiatement.", "The result below is the real pixel art. Every adjustment is visible immediately.")}</p></header>
+          <div className="settings-layout live-settings-layout">
+            <section className="settings-preview live-render-card" aria-labelledby="render-preview-title">
+              <div className="preview-card-heading">
+                <div><span className="eyebrow">{tr("APERÇU RÉEL", "LIVE PREVIEW")}</span><h2 id="render-preview-title">{sourceName}</h2></div>
+                <div className="preview-mode-switch" role="group" aria-label={tr("Type d’aperçu", "Preview type")}>
+                  <button type="button" className={previewMode === "original" ? "active" : ""} aria-pressed={previewMode === "original"} onClick={() => setPreviewMode("original")}>{tr("Original", "Original")}</button>
+                  <button type="button" className={previewMode === "pixel" ? "active" : ""} aria-pressed={previewMode === "pixel"} onClick={() => setPreviewMode("pixel")}>{tr("Pixel art", "Pixel art")}</button>
+                </div>
+              </div>
+              <div className={`live-preview-stage ${previewLoading ? "loading" : ""}`}>
+                {previewMode === "original"
+                  ? <ImageCropper dataUrl={sourceDataUrl} name={sourceName} ratio={imageSettings.width / imageSettings.height} locale={locale} transform={{ focusX: imageSettings.focusX, focusY: imageSettings.focusY, zoom: imageSettings.cropZoom }} onChange={(next) => setImageSettings((current) => ({ ...current, focusX: next.focusX, focusY: next.focusY, cropZoom: next.zoom }))}/>
+                  : previewProject ? <PixelRenderPreview project={previewProject} label={tr(`Aperçu pixelisé de ${sourceName}`, `Pixelated preview of ${sourceName}`)} /> : <div className="preview-placeholder">{tr("Préparation de l’aperçu…", "Preparing preview…")}</div>}
+                {previewLoading ? <span className="preview-updating" role="status">{tr("Mise à jour…", "Updating…")}</span> : null}
+              </div>
+              <div className="render-facts">
+                <b>{imageSettings.width} × {imageSettings.height}</b>
+                <span>{imageSettings.paletteSize} {tr("couleurs", "colors")}</span>
+                <span>{previewCells} {tr("cases", "cells")}</span>
+                <em>{previewDifficulty}</em>
+              </div>
+              {previewProject ? <div className="preview-palette" aria-label={tr("Palette calculée", "Generated palette")}>{previewProject.palette.map((color, index) => <span key={`${color}-${index}`} style={{ background: color }} title={`${index + 1} · ${color}`} />)}</div> : null}
+            </section>
+            <div className="image-controls simple-panel live-controls-panel">
+              <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices detail-counts">{detailOptions.map(([detail, label]) => { const presetFormat = gridFormat === "custom" ? (imageSettings.width === imageSettings.height ? "square" : imageSettings.width > imageSettings.height ? "landscape" : "portrait") : gridFormat; const dimensions = GRID_PRESETS[presetFormat][detail]; return <button type="button" key={detail} className={gridDetail === detail && gridFormat !== "custom" ? "active" : ""} aria-pressed={gridDetail === detail && gridFormat !== "custom"} onClick={() => applyDetailPreset(detail)}><b>{label}</b><small>{dimensions.join(" × ")}</small></button>; })}</div></fieldset>
               <fieldset className="choice-field"><legend>{tr("Nombre de couleurs", "Number of colors")}</legend><div className="choice-cards compact-choices color-counts">{[4, 8, 12].map((count) => <button type="button" key={count} className={imageSettings.paletteSize === count ? "active" : ""} aria-pressed={imageSettings.paletteSize === count} onClick={() => updateImageSetting("paletteSize", count)}><b>{count}</b><small>{tr("couleurs", "colors")}</small></button>)}</div></fieldset>
               <details className="advanced-controls">
                 <summary>{tr("Réglages avancés", "Advanced settings")}</summary>
@@ -903,7 +1031,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
                 {imageAdjustments.map(([key, label]) => <label className="range-label" key={key}><span>{label} <b>{imageSettings[key]}%</b></span><input type="range" min="50" max="160" value={imageSettings[key]} onChange={(event) => updateImageSetting(key, Number(event.target.value))}/></label>)}
                 <label className="check-label"><input type="checkbox" checked={imageSettings.dither} onChange={(event) => updateImageSetting("dither", event.target.checked)}/> {tr("Texture pixelisée", "Pixel texture")} <small>{tr("Ajoute du détail aux transitions de couleur.", "Adds detail to color transitions.")}</small></label>
               </details>
-              <button className="primary compact generate-button" disabled={processing} onClick={() => void generateFromImage(sourceDataUrl, sourceName, imageSettings, creationSource ?? "image")}>{processing ? tr("Préparation…", "Processing…") : tr("Créer ma grille", "Create my grid")}</button>
+              <button className="primary compact generate-button" disabled={processing || previewLoading || !previewProject} onClick={() => previewProject ? loadProject(previewProject, creationSource ?? "image") : void generateFromImage(sourceDataUrl, sourceName, imageSettings, creationSource ?? "image")}>{processing || previewLoading ? tr("Mise à jour…", "Updating…") : tr("Utiliser ce rendu", "Use this result")}</button>
               {imageError ? <p className="form-error" role="alert">{imageError}</p> : null}
             </div>
           </div>
@@ -935,18 +1063,30 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
               progress={progress}
               undoDisabled={undoStack.length === 0}
               redoDisabled={redoStack.length === 0}
-              downloadLabel={filled === 0 ? tr("Télécharger le modèle", "Download the pattern") : tr("Télécharger mon coloriage", "Download my coloring")}
+              exportLabel={tr("Exporter", "Export")}
               onTool={setTool}
               onColor={(index) => { setSelected(index); setTool("pencil"); }}
               onUndo={undo}
               onRedo={redo}
-              onDownload={() => exportPng("current")}
+              onExport={() => setExportOpen(true)}
             />
-            <div className="canvas-quick-actions"><button onClick={editCreationSource}>← {tr("Modifier la création", "Edit creation")}</button><details className="view-settings"><summary>{tr("Affichage", "View")}</summary><div className="view-controls"><label>{tr("Aide", "Guide")} <input type="range" min="0" max="100" step="5" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))}/><b>{referenceOpacity}%</b></label><label className="toggle"><input type="checkbox" checked={showNumbers} onChange={(event) => setShowNumbers(event.target.checked)}/> {tr("Numéros", "Numbers")}</label><label className="toggle"><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)}/> {tr("Traits", "Grid lines")}</label></div></details></div>
+            <div className="canvas-quick-actions"><button onClick={editCreationSource}>← {tr("Modifier la création", "Edit creation")}</button><button className="quick-export-button" onClick={() => setExportOpen(true)}>↗ {tr("Exporter", "Export")}</button><details className="view-settings"><summary>{tr("Affichage", "View")}</summary><div className="view-controls"><label>{tr("Aide", "Guide")} <input type="range" min="0" max="100" step="5" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))}/><b>{referenceOpacity}%</b></label><label className="toggle"><input type="checkbox" checked={showNumbers} onChange={(event) => setShowNumbers(event.target.checked)}/> {tr("Numéros", "Numbers")}</label><label className="toggle"><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)}/> {tr("Traits", "Grid lines")}</label></div></details></div>
             <div className="coordinate-bar" aria-live="polite">{cursorCoordinates}<span>{tr("Pince pour zoomer ou utilise l’outil main pour déplacer.", "Pinch to zoom or use the hand tool to pan.")}</span></div>
             <PixelCanvas locale={locale} project={project} painted={painted} tool={tool} selected={selected} showGrid={showGrid} showNumbers={showNumbers} referenceOpacity={referenceOpacity} onStrokeStart={handleCanvasStrokeStart} onStrokeMove={handleCanvasStrokeMove} onHover={setHoveredIndex}/>
           </section>
         </div> : null}
+        <ExportSheet
+          locale={locale}
+          open={exportOpen}
+          projectName={projectName}
+          saveState={saveState}
+          hasPainting={filled > 0}
+          onClose={closeExport}
+          onSaveCurrent={() => void saveOrSharePng("current")}
+          onSavePrintable={() => void saveOrSharePng("printable")}
+          onPrint={printPrintableGrid}
+          onSaveComplete={() => void saveOrSharePng("complete")}
+        />
       </section>
     </main>
   );

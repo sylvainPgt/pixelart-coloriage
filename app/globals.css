@@ -465,6 +465,44 @@ body.editor-expanded { overflow: hidden; }
 .settings-summary b { font-family: var(--font-display), serif; font-size: 27px; }
 .settings-summary span { font-size: 12px; font-weight: 800; }
 .dimensions .swap-dimensions { flex: 0 0 auto; }
+.live-settings-layout { grid-template-columns: minmax(320px, 1fr) minmax(300px, .72fr); }
+.live-render-card { position: sticky; top: 78px; display: grid; gap: 14px; }
+.preview-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.preview-card-heading h2 { max-width: 360px; margin: 3px 0 0; overflow: hidden; font-family: var(--font-display), serif; font-size: 24px; text-overflow: ellipsis; white-space: nowrap; }
+.preview-mode-switch { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: #f5f2eb; }
+.preview-mode-switch button { min-height: 35px; padding: 6px 12px; border: 0; border-radius: 999px; color: var(--muted); background: transparent; font-size: 11px; font-weight: 800; cursor: pointer; }
+.preview-mode-switch button.active { color: white; background: var(--ink); }
+.live-preview-stage { position: relative; display: grid; min-height: 310px; place-items: center; overflow: hidden; border-radius: 14px; background: linear-gradient(135deg, #ece9e2 25%, transparent 25%) -12px 0/24px 24px, linear-gradient(225deg, #ece9e2 25%, transparent 25%) -12px 0/24px 24px, linear-gradient(315deg, #ece9e2 25%, transparent 25%) 0 0/24px 24px, linear-gradient(45deg, #ece9e2 25%, #f8f6f0 25%) 0 0/24px 24px; }
+.live-preview-stage .crop-editor { width: 100%; background: transparent; }
+.live-preview-stage .crop-canvas-frame { width: min(100%, 520px); }
+.pixel-render-preview { display: block; width: min(100%, 520px); max-height: 56vh; border: 5px solid var(--ink); border-radius: 10px; background: white; box-shadow: 7px 8px 0 #cbc6bd; image-rendering: pixelated; object-fit: contain; }
+.preview-placeholder { color: var(--muted); font-size: 13px; font-weight: 800; }
+.preview-updating { position: absolute; right: 10px; bottom: 10px; padding: 7px 10px; border-radius: 999px; color: white; background: #17162add; font-size: 10px; font-weight: 800; }
+.live-preview-stage.loading .pixel-render-preview { opacity: .7; }
+.render-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.render-facts > * { padding: 7px 9px; border-radius: 8px; color: var(--muted); background: #f4f1eb; font-size: 11px; font-style: normal; font-weight: 800; }
+.render-facts b { color: white; background: var(--ink); }
+.render-facts em { color: #5540c9; background: #efecff; text-transform: capitalize; }
+.preview-palette { display: flex; flex-wrap: wrap; gap: 6px; }
+.preview-palette span { width: 26px; height: 26px; border: 2px solid white; border-radius: 6px; box-shadow: 0 0 0 1px #bbb5aa; }
+.detail-counts { grid-template-columns: repeat(3, 1fr); }
+
+.export-sheet-backdrop { position: fixed; inset: 0; z-index: 300; display: grid; align-items: end; justify-items: center; padding: 20px; background: #17162a8f; backdrop-filter: blur(4px); }
+.export-sheet { width: min(100%, 560px); max-height: min(760px, calc(100dvh - 32px)); padding: 20px; overflow-y: auto; border: 1px solid #ffffff70; border-radius: 24px; background: #fffaf0; box-shadow: 0 30px 90px #08071866; }
+.export-sheet-handle { display: none; }
+.export-sheet header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.export-sheet h2 { margin: 4px 0 0; font-family: var(--font-display), serif; font-size: 27px; }
+.export-sheet-close { width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: white; font-size: 25px; cursor: pointer; }
+.autosave-status { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; color: #276346; background: #eaf8ef; font-size: 11px; font-weight: 800; }
+.autosave-status.saving { color: #66552d; background: #fff4d7; }
+.export-sheet-actions { display: grid; gap: 9px; }
+.export-sheet-actions button { display: grid; grid-template-columns: 42px 1fr; grid-template-rows: auto auto; column-gap: 11px; min-height: 70px; padding: 12px; border: 1px solid var(--line); border-radius: 13px; color: var(--ink); background: white; text-align: left; cursor: pointer; }
+.export-sheet-actions button > span { grid-row: 1 / 3; display: grid; width: 42px; height: 42px; place-items: center; border-radius: 10px; color: var(--purple); background: #efecff; font-size: 20px; }
+.export-sheet-actions button b { align-self: end; font-size: 13px; }
+.export-sheet-actions button small { align-self: start; margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+.export-sheet-actions button.primary-export { color: white; border-color: var(--ink); background: var(--ink); }
+.export-sheet-actions button.primary-export > span { color: white; background: var(--purple); }
+.export-sheet-actions button.primary-export small { color: #d9d6e5; }
 
 .studio-editor { width: 100%; max-width: none; height: calc(100dvh - 175px); min-height: 560px; }
 .studio-editor .tools { min-height: 0; overflow-y: auto; }
@@ -605,6 +643,8 @@ body.editor-expanded { overflow: hidden; }
   .mobile-tool-row button { width: 44px; min-width: 44px; height: 44px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #faf8f3; font-size: 18px; font-weight: 800; }
   .mobile-tool-row button.active { color: var(--purple); border-color: var(--purple); background: #f1efff; }
   .mobile-tool-row button:disabled { opacity: .4; }
+  .mobile-tool-row .mobile-export-button { display: flex; width: auto; min-width: 78px; align-items: center; justify-content: center; gap: 5px; padding-inline: 9px; color: white; border-color: var(--ink); background: var(--ink); }
+  .mobile-tool-row .mobile-export-button small { font-size: 9px; font-weight: 900; }
   .mobile-progress { min-width: 44px; margin-left: auto; color: var(--purple); text-align: center; font-size: 11px; font-weight: 900; }
   .mobile-palette { display: flex; gap: 7px; max-width: 100%; padding: 3px 2px; overflow-x: auto; scrollbar-width: none; }
   .mobile-palette button { width: 44px; min-width: 44px; height: 44px; padding: 0; border: 3px solid white; border-radius: 9px; box-shadow: 0 0 0 1px #bcb6c4; color: white; font-size: 11px; font-weight: 900; text-shadow: 0 1px 3px #000; }
@@ -724,6 +764,7 @@ body.editor-expanded { overflow: hidden; }
   .landing-studio-card { align-items: stretch; flex-direction: column; }
   .landing-studio-card .primary { width: 100%; }
   .crop-layout, .settings-layout { grid-template-columns: 1fr; }
+  .live-render-card { position: relative; top: auto; }
   .crop-format-panel .choice-cards { grid-template-columns: repeat(3, 1fr); }
   .studio-editor { grid-template-columns: 1fr; height: calc(100dvh - 175px); min-height: 0; }
   .studio-editor .tools { display: none; }
@@ -757,6 +798,19 @@ body.editor-expanded { overflow: hidden; }
   .studio-step-actions > * { flex: 1; }
   .settings-preview .crop-canvas-frame { width: min(100%, 360px); }
   .settings-step .settings-preview .crop-controls, .settings-step .settings-preview .crop-editor > p { display: none; }
+  .settings-step .live-render-card .crop-editor { display: block; }
+  .live-preview-stage { min-height: min(360px, 42dvh); }
+  .pixel-render-preview { max-height: 42dvh; border-width: 4px; box-shadow: 5px 6px 0 #cbc6bd; }
+  .preview-card-heading { align-items: stretch; flex-direction: column; }
+  .preview-mode-switch { align-self: flex-start; }
+  .preview-mode-switch button { min-height: 40px; }
+  .render-facts { gap: 5px; }
+  .render-facts > * { padding: 6px 7px; font-size: 10px; }
+  .live-controls-panel .generate-button { position: sticky; z-index: 7; bottom: max(10px, env(safe-area-inset-bottom)); box-shadow: 0 8px 28px #17162a36; }
+  .export-sheet-backdrop { padding: 0; }
+  .export-sheet { width: 100%; max-height: min(82dvh, 720px); padding: 10px 14px max(16px, env(safe-area-inset-bottom)); border: 0; border-radius: 24px 24px 0 0; }
+  .export-sheet-handle { display: block; width: 46px; height: 5px; margin: 0 auto 12px; border-radius: 999px; background: #c8c1b7; }
+  .export-sheet h2 { font-size: 24px; }
   .step-editor .studio-stepper { display: none; }
   .step-editor .studio-route { padding: 0; }
   .studio-editor { height: calc(100dvh - 58px - env(safe-area-inset-top)); border: 0; border-radius: 0; }

@@ -8,12 +8,12 @@ type MobileEditorToolbarProps = {
   progress: number;
   undoDisabled: boolean;
   redoDisabled: boolean;
-  downloadLabel: string;
+  exportLabel: string;
   onTool: (tool: EditorTool) => void;
   onColor: (index: number) => void;
   onUndo: () => void;
   onRedo: () => void;
-  onDownload: () => void;
+  onExport: () => void;
 };
 
 export default function MobileEditorToolbar({
@@ -24,12 +24,12 @@ export default function MobileEditorToolbar({
   progress,
   undoDisabled,
   redoDisabled,
-  downloadLabel,
+  exportLabel,
   onTool,
   onColor,
   onUndo,
   onRedo,
-  onDownload,
+  onExport,
 }: MobileEditorToolbarProps) {
   const tr = (french: string, english: string) => locale === "fr" ? french : english;
 
@@ -42,7 +42,7 @@ export default function MobileEditorToolbar({
         <button className={tool === "fill" ? "active" : ""} aria-label={tr("Remplir une zone", "Fill an area")} aria-pressed={tool === "fill"} onClick={() => onTool("fill")}><span aria-hidden="true">▰</span></button>
         <button aria-label={tr("Annuler", "Undo")} disabled={undoDisabled} onClick={onUndo}><span aria-hidden="true">↶</span></button>
         <button aria-label={tr("Rétablir", "Redo")} disabled={redoDisabled} onClick={onRedo}><span aria-hidden="true">↷</span></button>
-        <button aria-label={downloadLabel} onClick={onDownload}><span aria-hidden="true">↓</span></button>
+        <button className="mobile-export-button" aria-label={exportLabel} onClick={onExport}><span aria-hidden="true">↗</span><small>{exportLabel}</small></button>
         <span className="mobile-progress" aria-label={`${tr("Progression", "Progress")} ${progress}%`}>{progress}%</span>
       </div>
       <div className="mobile-palette" role="group" aria-label={tr("Palette de couleurs", "Color palette")}>

@@ -41,6 +41,11 @@ try {
   assert(await studio.getByRole("gridcell").count() === 0, "La grille ne doit plus créer des milliers d’éléments HTML.");
   assert(await studio.getByRole("button", { name: "Agrandir" }).count() === 1, "Le zoom doit être accessible sur mobile.");
   assert(await studio.getByRole("button", { name: "Déplacer" }).count() >= 1, "Le déplacement de la grille doit être disponible.");
+  await studio.locator(".mobile-export-button").click();
+  await studio.getByRole("dialog", { name: /Exporter/ }).waitFor();
+  assert(await studio.locator(".export-sheet-actions button").count() === 4, "L’export mobile doit proposer sauvegarde, grille A4, impression et modèle terminé.");
+  assert(await studio.locator(".autosave-status").count() === 1, "Le statut de sauvegarde locale doit être visible dans l’exporteur.");
+  await studio.getByRole("button", { name: "Fermer" }).click();
   const coloringCanvas = studio.getByRole("application", { name: /Grille de coloriage 16 par 16/ });
   await coloringCanvas.focus();
   await coloringCanvas.press("Space");
@@ -55,10 +60,13 @@ try {
   assert(await photo.getByRole("img", { name: /Zone recadrée/ }).count() === 1, "Une photo doit passer par une étape de cadrage.");
   await photo.getByRole("button", { name: /Portrait/ }).click();
   await photo.getByRole("button", { name: /Continuer vers les réglages/ }).click();
+  await photo.getByRole("heading", { level: 1, name: "Prévisualise et ajuste" }).waitFor();
+  await photo.getByRole("img", { name: /Aperçu pixelisé/ }).waitFor();
+  assert(await photo.locator(".preview-palette span").count() > 1, "L’aperçu doit afficher la palette réellement calculée.");
   await photo.getByText("Réglages avancés", { exact: true }).click();
   await photo.getByLabel("Colonnes").fill("64");
   await photo.getByLabel("Lignes").fill("64");
-  await photo.getByRole("button", { name: "Créer ma grille" }).click();
+  await photo.getByRole("button", { name: "Utiliser ce rendu" }).click();
   await photo.getByRole("application", { name: /Grille de coloriage 64 par 64/ }).waitFor();
   assert(await photo.locator("canvas.pixel-canvas").count() === 1, "Une grille 64 × 64 doit rester rendue par un seul canvas.");
   const canvasFits = await photo.evaluate(() => {
