@@ -277,6 +277,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
   const [previewMode, setPreviewMode] = useState<RenderPreviewMode>("pixel");
   const [previewProject, setPreviewProject] = useState<PixelProject | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [saveState, setSaveState] = useState<"saving" | "saved">("saved");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -900,10 +901,10 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
     ["detailed", "Detailed", "24 × 24"],
   ];
   const projectName = getLocalizedProjectName(project.name, locale);
-  const formatOptions: Array<[Exclude<GridFormat, "custom">, string]> = [
-    ["square", tr("Carré", "Square")],
-    ["portrait", tr("Portrait", "Portrait")],
-    ["landscape", tr("Paysage", "Landscape")],
+  const formatOptions: Array<[Exclude<GridFormat, "custom">, string, string]> = [
+    ["square", tr("Carré", "Square"), tr("Idéal à l’écran", "Great on screen")],
+    ["portrait", tr("Portrait", "Portrait"), tr("Pratique sur A4", "Works well on A4")],
+    ["landscape", tr("Paysage", "Landscape"), tr("Pour les scènes larges", "For wide scenes")],
   ];
   const detailOptions: Array<[GridDetail, string]> = [
     ["simple", tr("Simple", "Simple")],
@@ -986,10 +987,9 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
           <header className="studio-step-heading"><span className="eyebrow">{tr("ÉTAPE 2", "STEP 2")}</span><h1>{tr("Cadre ton image", "Crop your image")}</h1><p>{tr("Le cadre suit automatiquement la forme de ta future grille.", "The frame automatically matches the shape of your future grid.")}</p></header>
           <div className="crop-layout">
             <ImageCropper dataUrl={sourceDataUrl} name={sourceName} ratio={imageSettings.width / imageSettings.height} locale={locale} transform={{ focusX: imageSettings.focusX, focusY: imageSettings.focusY, zoom: imageSettings.cropZoom }} onChange={(next) => setImageSettings((current) => ({ ...current, focusX: next.focusX, focusY: next.focusY, cropZoom: next.zoom }))}/>
-            <aside className="crop-format-panel">
-              <fieldset className="choice-field"><legend>{tr("Format", "Format")}</legend><div className="choice-cards compact-choices">{formatOptions.map(([format, label]) => <button type="button" key={format} className={gridFormat === format ? "active" : ""} onClick={() => applyGridPreset(format)}><b>{label}</b><small>{GRID_PRESETS[format][gridDetail].join(" × ")}</small></button>)}</div></fieldset>
-              <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices">{detailOptions.map(([detail, label]) => { const dimensions = gridFormat === "custom" ? [imageSettings.width, imageSettings.height] : GRID_PRESETS[gridFormat][detail]; return <button type="button" key={detail} disabled={gridFormat === "custom"} className={gridDetail === detail && gridFormat !== "custom" ? "active" : ""} onClick={() => gridFormat !== "custom" && applyGridPreset(gridFormat, detail)}><b>{label}</b><small>{dimensions.join(" × ")}</small></button>; })}</div></fieldset>
-              <p className="a4-note">{tr("Le format Portrait laisse de la place pour la légende sur une feuille A4.", "Portrait format leaves room for the color key on an A4 sheet.")}</p>
+            <aside className="crop-format-panel crop-format-minimal">
+              <fieldset className="choice-field"><legend>{tr("Forme de la grille", "Grid shape")}</legend><div className="choice-cards compact-choices">{formatOptions.map(([format, label, description]) => <button type="button" key={format} className={gridFormat === format ? "active" : ""} aria-pressed={gridFormat === format} onClick={() => applyGridPreset(format)}><b>{label}</b><small>{description}</small></button>)}</div></fieldset>
+              <p className="crop-format-note">{tr("La finesse et les couleurs se règlent juste après, avec le résultat sous les yeux.", "Detail and colors come next, with the result always in view.")}</p>
             </aside>
           </div>
           <div className="studio-step-actions"><button className="quiet-button" onClick={() => dispatchWorkflow({ type: "step", step: "source" })}>← {tr("Changer de source", "Change source")}</button><button className="primary compact" onClick={() => dispatchWorkflow({ type: "step", step: "settings" })}>{tr("Continuer vers les réglages", "Continue to settings")} →</button></div>
@@ -997,7 +997,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
 
         {workflow.step === "settings" && sourceDataUrl ? <div className="studio-step settings-step">
           <header className="studio-step-heading"><span className="eyebrow">{tr("ÉTAPE 3", "STEP 3")}</span><h1>{tr("Prévisualise et ajuste", "Preview and adjust")}</h1><p>{tr("Le rendu ci-dessous est le vrai pixel art. Chaque réglage est visible immédiatement.", "The result below is the real pixel art. Every adjustment is visible immediately.")}</p></header>
-          <div className="settings-layout live-settings-layout">
+          <div className={`settings-layout live-settings-layout ${advancedSettingsOpen ? "advanced-tuning" : ""}`}>
             <section className="settings-preview live-render-card" aria-labelledby="render-preview-title">
               <div className="preview-card-heading">
                 <div><span className="eyebrow">{tr("APERÇU RÉEL", "LIVE PREVIEW")}</span><h2 id="render-preview-title">{sourceName}</h2></div>
@@ -1023,7 +1023,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
             <div className="image-controls simple-panel live-controls-panel">
               <fieldset className="choice-field"><legend>{tr("Niveau de détail", "Level of detail")}</legend><div className="choice-cards compact-choices detail-counts">{detailOptions.map(([detail, label]) => { const presetFormat = gridFormat === "custom" ? (imageSettings.width === imageSettings.height ? "square" : imageSettings.width > imageSettings.height ? "landscape" : "portrait") : gridFormat; const dimensions = GRID_PRESETS[presetFormat][detail]; return <button type="button" key={detail} className={gridDetail === detail && gridFormat !== "custom" ? "active" : ""} aria-pressed={gridDetail === detail && gridFormat !== "custom"} onClick={() => applyDetailPreset(detail)}><b>{label}</b><small>{dimensions.join(" × ")}</small></button>; })}</div></fieldset>
               <fieldset className="choice-field"><legend>{tr("Nombre de couleurs", "Number of colors")}</legend><div className="choice-cards compact-choices color-counts">{[4, 8, 12].map((count) => <button type="button" key={count} className={imageSettings.paletteSize === count ? "active" : ""} aria-pressed={imageSettings.paletteSize === count} onClick={() => updateImageSetting("paletteSize", count)}><b>{count}</b><small>{tr("couleurs", "colors")}</small></button>)}</div></fieldset>
-              <details className="advanced-controls">
+              <details className="advanced-controls" onToggle={(event) => setAdvancedSettingsOpen(event.currentTarget.open)}>
                 <summary>{tr("Réglages avancés", "Advanced settings")}</summary>
                 <div className="control-group dimensions"><label>{tr("Colonnes", "Columns")}<input type="number" min="8" max="64" value={imageSettings.width} onChange={(event) => { setGridFormat("custom"); updateImageSetting("width", Math.max(8, Math.min(64, Number(event.target.value)))); }}/></label><span>×</span><label>{tr("Lignes", "Rows")}<input type="number" min="8" max="64" value={imageSettings.height} onChange={(event) => { setGridFormat("custom"); updateImageSetting("height", Math.max(8, Math.min(64, Number(event.target.value)))); }}/></label><button type="button" className="swap-dimensions" onClick={() => { setGridFormat("custom"); setImageSettings((current) => ({ ...current, width: current.height, height: current.width })); }}>⇄ {tr("Permuter", "Swap")}</button></div>
                 <label className="range-label palette-range"><span>{tr("Palette détaillée", "Detailed palette")} <b>{imageSettings.paletteSize} {tr("couleurs", "colors")}</b></span><input aria-label={tr("Nombre précis de couleurs", "Exact number of colors")} type="range" min="2" max="20" step="1" value={imageSettings.paletteSize} onChange={(event) => updateImageSetting("paletteSize", Number(event.target.value))}/><small>{tr("Plus de couleurs préservent les nuances, mais rendent le coloriage plus complexe.", "More colors preserve nuances but make coloring more complex.")}</small></label>

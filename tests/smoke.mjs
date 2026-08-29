@@ -58,12 +58,20 @@ try {
   await photo.locator('input[type="file"]').setInputFiles(path.resolve("assets/assets_demo.png"));
   await photo.getByRole("heading", { level: 1, name: "Cadre ton image" }).waitFor();
   assert(await photo.getByRole("img", { name: /Zone recadrée/ }).count() === 1, "Une photo doit passer par une étape de cadrage.");
+  assert(await photo.getByText("Niveau de détail", { exact: true }).count() === 0, "Le cadrage ne doit pas répéter les réglages de rendu.");
   await photo.getByRole("button", { name: /Portrait/ }).click();
   await photo.getByRole("button", { name: /Continuer vers les réglages/ }).click();
   await photo.getByRole("heading", { level: 1, name: "Prévisualise et ajuste" }).waitFor();
   await photo.getByRole("img", { name: /Aperçu pixelisé/ }).waitFor();
   assert(await photo.locator(".preview-palette span").count() > 1, "L’aperçu doit afficher la palette réellement calculée.");
   await photo.getByText("Réglages avancés", { exact: true }).click();
+  assert(await photo.locator(".live-settings-layout").evaluate((element) => element.classList.contains("advanced-tuning")), "L’ouverture des réglages avancés doit activer l’aperçu mobile compact.");
+  await photo.getByLabel("Luminosité").scrollIntoViewIfNeeded();
+  const stickyPreviewVisible = await photo.locator(".live-render-card").evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return box.top >= 57 && box.top < window.innerHeight * 0.55 && box.bottom > box.top;
+  });
+  assert(stickyPreviewVisible, "L’aperçu doit rester visible pendant le réglage des curseurs avancés.");
   await photo.getByLabel("Colonnes").fill("64");
   await photo.getByLabel("Lignes").fill("64");
   await photo.getByRole("button", { name: "Utiliser ce rendu" }).click();
