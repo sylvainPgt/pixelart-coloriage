@@ -18,6 +18,7 @@ import PixelCanvas from "@/components/PixelCanvas";
 import PixelRenderPreview from "@/components/PixelRenderPreview";
 import MobileEditorToolbar from "@/components/MobileEditorToolbar";
 import TemplateLibrary from "@/components/TemplateLibrary";
+import AiContentReportSheet from "@/components/AiContentReportSheet";
 import { hasNetworkConnection } from "@/lib/connectivity";
 import { getCropRect } from "@/lib/crop-geometry";
 import { type PixelProject, type Rgb, quantizePixels } from "@/lib/pixel-art";
@@ -279,11 +280,13 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
   const [previewLoading, setPreviewLoading] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [aiReportOpen, setAiReportOpen] = useState(false);
   const [saveState, setSaveState] = useState<"saving" | "saved">("saved");
   const fileRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLInputElement>(null);
   const hasActiveProject = workflow.step === "editor";
   const closeExport = useCallback(() => setExportOpen(false), []);
+  const closeAiReport = useCallback(() => setAiReportOpen(false), []);
 
   function setMode(nextMode: Mode) {
     dispatchWorkflow({ type: "mode", mode: nextMode });
@@ -984,7 +987,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
         </div> : null}
 
         {workflow.step === "crop" && sourceDataUrl ? <div className="studio-step crop-step">
-          <header className="studio-step-heading"><span className="eyebrow">{tr("ÉTAPE 2", "STEP 2")}</span><h1>{tr("Cadre ton image", "Crop your image")}</h1><p>{tr("Le cadre suit automatiquement la forme de ta future grille.", "The frame automatically matches the shape of your future grid.")}</p></header>
+          <header className="studio-step-heading"><span className="eyebrow">{tr("ÉTAPE 2", "STEP 2")}</span><h1>{tr("Cadre ton image", "Crop your image")}</h1><p>{tr("Le cadre suit automatiquement la forme de ta future grille.", "The frame automatically matches the shape of your future grid.")}</p>{creationSource === "text" ? <button className="ai-report-link" type="button" onClick={() => setAiReportOpen(true)}>⚑ {tr("Signaler cette création IA", "Report this AI creation")}</button> : null}</header>
           <div className="crop-layout">
             <ImageCropper dataUrl={sourceDataUrl} name={sourceName} ratio={imageSettings.width / imageSettings.height} locale={locale} transform={{ focusX: imageSettings.focusX, focusY: imageSettings.focusY, zoom: imageSettings.cropZoom }} onChange={(next) => setImageSettings((current) => ({ ...current, focusX: next.focusX, focusY: next.focusY, cropZoom: next.zoom }))}/>
             <aside className="crop-format-panel crop-format-minimal">
@@ -996,7 +999,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
         </div> : null}
 
         {workflow.step === "settings" && sourceDataUrl ? <div className="studio-step settings-step">
-          <header className="studio-step-heading"><span className="eyebrow">{tr("ÉTAPE 3", "STEP 3")}</span><h1>{tr("Prévisualise et ajuste", "Preview and adjust")}</h1><p>{tr("Le rendu ci-dessous est le vrai pixel art. Chaque réglage est visible immédiatement.", "The result below is the real pixel art. Every adjustment is visible immediately.")}</p></header>
+          <header className="studio-step-heading"><span className="eyebrow">{tr("ÉTAPE 3", "STEP 3")}</span><h1>{tr("Prévisualise et ajuste", "Preview and adjust")}</h1><p>{tr("Le rendu ci-dessous est le vrai pixel art. Chaque réglage est visible immédiatement.", "The result below is the real pixel art. Every adjustment is visible immediately.")}</p>{creationSource === "text" ? <button className="ai-report-link" type="button" onClick={() => setAiReportOpen(true)}>⚑ {tr("Signaler cette création IA", "Report this AI creation")}</button> : null}</header>
           <div className={`settings-layout live-settings-layout ${advancedSettingsOpen ? "advanced-tuning" : ""}`}>
             <section className="settings-preview live-render-card" aria-labelledby="render-preview-title">
               <div className="preview-card-heading">
@@ -1070,7 +1073,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
               onRedo={redo}
               onExport={() => setExportOpen(true)}
             />
-            <div className="canvas-quick-actions"><button onClick={editCreationSource}>← {tr("Modifier la création", "Edit creation")}</button><button className="quick-export-button" onClick={() => setExportOpen(true)}>↗ {tr("Exporter", "Export")}</button><details className="view-settings"><summary>{tr("Affichage", "View")}</summary><div className="view-controls"><label>{tr("Aide", "Guide")} <input type="range" min="0" max="100" step="5" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))}/><b>{referenceOpacity}%</b></label><label className="toggle"><input type="checkbox" checked={showNumbers} onChange={(event) => setShowNumbers(event.target.checked)}/> {tr("Numéros", "Numbers")}</label><label className="toggle"><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)}/> {tr("Traits", "Grid lines")}</label></div></details></div>
+            <div className="canvas-quick-actions"><button onClick={editCreationSource}>← {tr("Modifier la création", "Edit creation")}</button>{creationSource === "text" ? <button className="ai-report-link" type="button" onClick={() => setAiReportOpen(true)}>⚑ {tr("Signaler", "Report")}</button> : null}<button className="quick-export-button" onClick={() => setExportOpen(true)}>↗ {tr("Exporter", "Export")}</button><details className="view-settings"><summary>{tr("Affichage", "View")}</summary><div className="view-controls"><label>{tr("Aide", "Guide")} <input type="range" min="0" max="100" step="5" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))}/><b>{referenceOpacity}%</b></label><label className="toggle"><input type="checkbox" checked={showNumbers} onChange={(event) => setShowNumbers(event.target.checked)}/> {tr("Numéros", "Numbers")}</label><label className="toggle"><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)}/> {tr("Traits", "Grid lines")}</label></div></details></div>
             <div className="coordinate-bar" aria-live="polite">{cursorCoordinates}<span>{tr("Pince pour zoomer ou utilise l’outil main pour déplacer.", "Pinch to zoom or use the hand tool to pan.")}</span></div>
             <PixelCanvas locale={locale} project={project} painted={painted} tool={tool} selected={selected} showGrid={showGrid} showNumbers={showNumbers} referenceOpacity={referenceOpacity} onStrokeStart={handleCanvasStrokeStart} onStrokeMove={handleCanvasStrokeMove} onHover={setHoveredIndex}/>
           </section>
@@ -1087,6 +1090,7 @@ export default function PixelStudio({ initialLocale = "fr" }: { initialLocale?: 
           onPrint={printPrintableGrid}
           onSaveComplete={() => void saveOrSharePng("complete")}
         />
+        <AiContentReportSheet locale={locale} open={aiReportOpen} prompt={prompt} onClose={closeAiReport} />
       </section>
     </main>
   );

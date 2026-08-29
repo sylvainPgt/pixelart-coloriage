@@ -505,6 +505,22 @@ body.editor-expanded { overflow: hidden; }
 .export-sheet-actions button.primary-export { color: white; border-color: var(--ink); background: var(--ink); }
 .export-sheet-actions button.primary-export > span { color: white; background: var(--purple); }
 .export-sheet-actions button.primary-export small { color: #d9d6e5; }
+.ai-report-link { margin-top: 12px; padding: 7px 9px; border: 0; color: #6f4660; background: transparent; font-size: 11px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.ai-report-sheet { width: min(100%, 520px); }
+.ai-report-form > p { margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.ai-report-form fieldset { display: grid; gap: 7px; margin: 0 0 15px; padding: 0; border: 0; }
+.ai-report-form legend { margin-bottom: 9px; font-weight: 900; }
+.ai-report-form fieldset label { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 11px; background: white; cursor: pointer; }
+.ai-report-form input[type="radio"] { width: 18px; height: 18px; accent-color: var(--purple); }
+.ai-report-details { display: grid; gap: 7px; color: var(--ink); font-size: 12px; font-weight: 800; }
+.ai-report-details textarea { min-height: 88px; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: white; font: inherit; }
+.ai-report-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; }
+.ai-report-actions button { min-height: 44px; }
+.ai-report-success { display: grid; justify-items: center; gap: 8px; padding: 12px 8px 4px; text-align: center; }
+.ai-report-success > span { display: grid; width: 54px; height: 54px; place-items: center; border-radius: 50%; color: #16652a; background: #e6f6e9; font-size: 26px; font-weight: 900; }
+.ai-report-success h3, .ai-report-success p { margin: 0; }
+.ai-report-success p { max-width: 390px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.ai-report-success button { margin-top: 8px; }
 
 .studio-editor { width: 100%; max-width: none; height: calc(100dvh - 175px); min-height: 560px; }
 .studio-editor .tools { min-height: 0; overflow-y: auto; }

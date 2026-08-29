@@ -44,6 +44,7 @@ const pages: TrustPageContent[] = [
         paragraphs: [
           "Le texte de ta demande, l’ambiance choisie, le niveau de détail et la langue sont transmis au serveur Mosaipix, puis à Vercel AI Gateway et au fournisseur du modèle d’image afin de produire l’illustration. La photo de ton appareil n’est jamais jointe à cette demande.",
           "Mosaipix demande au fournisseur de ne pas utiliser les prompts pour entraîner ses modèles. N’écris toutefois aucune information personnelle, confidentielle ou sensible dans ta description.",
+          "Si tu signales une création inappropriée, le motif choisi, ton commentaire facultatif et le texte de la demande sont transmis à Osali Studio dans les journaux techniques afin d’examiner le résultat. L’image et les photos de ton appareil ne sont pas envoyées.",
         ],
         bullets: [
           "Finalité : créer l’image demandée et protéger le service contre les abus.",
@@ -71,7 +72,7 @@ const pages: TrustPageContent[] = [
           "Fonctionnement demandé par l’utilisateur : traitement local de la photo, création IA et recherche d’images.",
           "Intérêt légitime : sécurité, limitation des abus, diagnostic et mesure d’audience agrégée.",
           "Destinataires techniques : Vercel (hébergement, Analytics et AI Gateway), le fournisseur du modèle IA utilisé et Openverse pour la recherche d’images libres.",
-          "Durées : projets jusqu’à leur suppression dans le navigateur ; empreinte de limitation IA 24 heures ; éventuels échanges par e-mail pendant le temps nécessaire à leur traitement, au maximum 12 mois sauf obligation légale.",
+          "Durées : projets jusqu’à leur suppression dans le navigateur ; empreinte de limitation IA 24 heures ; signalements IA pendant la durée de conservation des journaux techniques, au maximum 30 jours ; éventuels échanges par e-mail pendant le temps nécessaire à leur traitement, au maximum 12 mois sauf obligation légale.",
           "Ces prestataires peuvent traiter des données hors de l’Espace économique européen selon leurs propres garanties contractuelles et politiques de confidentialité.",
         ],
       },
@@ -113,6 +114,7 @@ const pages: TrustPageContent[] = [
         paragraphs: [
           "Your written request, selected style, detail level and language are sent to the Mosaipix server, then to Vercel AI Gateway and the image model provider to create the illustration. A photo from your device is never attached to this request.",
           "Mosaipix instructs the provider not to use prompts to train its models. You should still never include personal, confidential or sensitive information in a description.",
+          "If you report an inappropriate creation, the selected reason, your optional comment and the prompt are sent to Osali Studio in technical logs so the result can be reviewed. The generated image and photos from your device are not sent.",
         ],
         bullets: [
           "Purpose: create the requested image and protect the service from abuse.",
@@ -140,7 +142,7 @@ const pages: TrustPageContent[] = [
           "User-requested operation: local photo conversion, AI creation and open-image search.",
           "Legitimate interests: security, abuse prevention, diagnostics and aggregate audience analytics.",
           "Technical recipients: Vercel (hosting, Analytics and AI Gateway), the selected AI model provider and Openverse for open-image search.",
-          "Retention: projects until removed from the browser; AI rate-limit hash for 24 hours; email exchanges for as long as needed to handle them, no longer than 12 months unless legally required.",
+          "Retention: projects until removed from the browser; AI rate-limit hash for 24 hours; AI reports for the technical-log retention period, no longer than 30 days; email exchanges for as long as needed to handle them, no longer than 12 months unless legally required.",
           "These providers may process data outside the European Economic Area under their own contractual safeguards and privacy policies.",
         ],
       },

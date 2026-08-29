@@ -51,6 +51,29 @@ try {
   await coloringCanvas.press("Space");
   await studio.getByRole("application", { name: /1 couleur incorrecte/ }).waitFor();
 
+  const ai = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: "fr-FR" });
+  let aiReportPayload;
+  await ai.route("**/api/generate-image", async (route) => route.fulfill({
+    path: path.resolve("assets/assets_demo.png"),
+    contentType: "image/png",
+    headers: { "X-RateLimit-Remaining": "2" },
+  }));
+  await ai.route("**/api/report-ai", async (route) => {
+    aiReportPayload = route.request().postDataJSON();
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ reportId: "test-report" }) });
+  });
+  await ai.goto(`${baseUrl}/fr/studio`, { waitUntil: "domcontentloaded" });
+  await ai.getByLabel("Ton idée").fill("Un chat astronaute");
+  await ai.getByRole("button", { name: "Créer l’image" }).click();
+  await ai.getByRole("heading", { level: 1, name: "Cadre ton image" }).waitFor();
+  await ai.getByRole("button", { name: /Signaler cette création IA/ }).click();
+  await ai.getByRole("dialog", { name: "Signaler cette création IA" }).waitFor();
+  await ai.getByRole("radio", { name: "Sexuel ou inapproprié" }).check();
+  await ai.getByRole("button", { name: "Envoyer le signalement" }).click();
+  await ai.getByText("Signalement reçu", { exact: true }).waitFor();
+  assert(aiReportPayload?.reason === "sexual" && aiReportPayload?.prompt === "Un chat astronaute", "Le signalement IA doit transmettre le motif choisi et la demande, sans image.");
+  assert(!("image" in aiReportPayload), "Le signalement IA ne doit jamais transmettre de photo.");
+
   const photo = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: "fr-FR" });
   photo.on("pageerror", (error) => browserErrors.push(error.message));
   await photo.goto(`${baseUrl}/fr/studio`, { waitUntil: "domcontentloaded" });
