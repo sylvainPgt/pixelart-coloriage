@@ -76,6 +76,13 @@ const pages: TrustPageContent[] = [
         ],
       },
       {
+        title: "Demander la suppression de tes données",
+        paragraphs: [
+          "Écris à contact@osali.fr avec l’objet « Suppression des données Mosaipix ». Indique uniquement la date approximative, la fonctionnalité utilisée et tout contexte nécessaire pour retrouver les données concernées. N’envoie ni mot de passe, ni photo personnelle, ni autre donnée sensible.",
+          "Mosaipix supprimera les données encore identifiables et demandera à ses prestataires techniques d’en faire autant lorsque cela est applicable. Les projets et photos conservés uniquement sur ton appareil doivent être supprimés depuis les réglages du navigateur ou de l’application. L’empreinte utilisée pour limiter les créations IA expire automatiquement après 24 heures ; les éventuels échanges par e-mail peuvent être conservés jusqu’à 12 mois, sauf obligation légale.",
+        ],
+      },
+      {
         title: "Tes droits",
         paragraphs: [
           "Tu peux demander l’accès, la rectification, l’effacement, la limitation ou l’opposition au traitement de tes données lorsque ces droits s’appliquent. Écris à l’adresse indiquée sur la page À propos. Tu peux aussi adresser une réclamation à la CNIL. Comme aucun compte n’est créé, joins suffisamment de contexte pour que ta demande puisse être retrouvée sans envoyer de donnée sensible.",
@@ -135,6 +142,13 @@ const pages: TrustPageContent[] = [
           "Technical recipients: Vercel (hosting, Analytics and AI Gateway), the selected AI model provider and Openverse for open-image search.",
           "Retention: projects until removed from the browser; AI rate-limit hash for 24 hours; email exchanges for as long as needed to handle them, no longer than 12 months unless legally required.",
           "These providers may process data outside the European Economic Area under their own contractual safeguards and privacy policies.",
+        ],
+      },
+      {
+        title: "Request deletion of your data",
+        paragraphs: [
+          "Email contact@osali.fr with the subject “Mosaipix data deletion”. Include only the approximate date, the feature you used and enough context to locate the relevant data. Do not send a password, personal photo or other sensitive information.",
+          "Mosaipix will delete data that can still be identified and ask its technical providers to do the same where applicable. Projects and photos stored only on your device must be removed from the browser or app settings. The fingerprint used to limit AI creations expires automatically after 24 hours; email exchanges may be kept for up to 12 months unless a legal obligation requires otherwise.",
         ],
       },
       {

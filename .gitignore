@@ -15,6 +15,7 @@ test-results/
 artifacts/
 *.log
 .vercel
+gha-creds-*.json
 android/local.properties
 android/signing.properties
 android/mosaipix-upload.keystore
