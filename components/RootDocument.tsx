@@ -19,7 +19,7 @@ const display = Fraunces({
 export default function RootDocument({ locale, children }: { locale: Locale; children: ReactNode }) {
   return (
     <html lang={locale} className={`${sans.variable} ${display.variable}`}>
-      <body>
+      <body id="page-top">
         {children}
         <PwaRegister />
         <Analytics />

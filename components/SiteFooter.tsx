@@ -21,6 +21,7 @@ export default function SiteFooter({ locale }: { locale: Locale }) {
           {about ? <Link href={`/${locale}/${about.slug}`}>{locale === "fr" ? "À propos" : "About"}</Link> : null}
           {privacy ? <Link href={`/${locale}/${privacy.slug}`}>{locale === "fr" ? "Confidentialité" : "Privacy"}</Link> : null}
           {legal ? <Link href={`/${locale}/${legal.slug}`}>{locale === "fr" ? "Mentions légales" : "Legal notice"}</Link> : null}
+          <a href="#page-top">{locale === "fr" ? "Retour en haut" : "Back to top"} <span aria-hidden="true">↑</span></a>
         </nav>
         <div className="footer-feedback">
           {SITE_OWNER.email ? <a className="feedback-button" href={`mailto:${SITE_OWNER.email}?subject=${encodeURIComponent(subject)}`}>{locale === "fr" ? "Donner mon avis" : "Share feedback"} <span aria-hidden="true">→</span></a> : null}
