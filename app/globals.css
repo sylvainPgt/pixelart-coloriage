@@ -874,3 +874,68 @@ html[lang="fr"] .route-loading [lang="en"],
 html[lang="en"] .route-loading [lang="fr"] {
   display: none;
 }
+
+body:has(.public-navigation) {
+  overflow-x: clip;
+}
+
+.public-navigation {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+.public-navigation ~ section[id] {
+  scroll-margin-top: calc(6rem + env(safe-area-inset-top));
+}
+
+.public-nav-menu {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .public-nav-menu {
+    position: relative;
+    display: block;
+  }
+
+  .public-nav-menu summary {
+    display: grid;
+    min-height: 44px;
+    padding-inline: 10px;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .public-nav-menu summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .public-nav-menu[open] summary {
+    background: var(--cream);
+  }
+
+  .public-nav-links {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    display: grid;
+    min-width: 11rem;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--paper);
+    box-shadow: var(--shadow);
+  }
+
+  .public-nav-links a {
+    display: flex;
+    padding-inline: 8px;
+  }
+}
