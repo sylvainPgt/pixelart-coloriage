@@ -40,14 +40,91 @@ jobs:
       - run: npm run test:pwa
 
   android-internal:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: Deploy Android to Play internal testing
     needs: application
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/deploy-play-internal.yml
-    secrets:
-      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    concurrency:
+      group: play-internal-${{ github.ref }}
+      cancel-in-progress: false
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Synchronize the Android wrapper
+        run: npx cap sync android
+
+      - name: Restore the upload key
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/mosaipix-upload.keystore
+          {
+            echo "storeFile=mosaipix-upload.keystore"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/signing.properties
+
+      - name: Build the signed Android App Bundle
+        working-directory: android
+        run: |
+          export ANDROID_VERSION_CODE="$((100000 + GITHUB_RUN_NUMBER))"
+          export ANDROID_VERSION_NAME="1.0.${GITHUB_RUN_NUMBER}"
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon
+
+      - id: google-auth
+        name: Authenticate to Google Cloud without a stored key
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          project_id: mosaipix-play-deploy
+          workload_identity_provider: projects/1075192642115/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: mosaipix-github-deploy@mosaipix-play-deploy.iam.gserviceaccount.com
+          create_credentials_file: true
+
+      - name: Upload to the Play Store internal track
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5
+        with:
+          serviceAccountJson: ${{ steps.google-auth.outputs.credentials_file_path }}
+          packageName: com.osalistudio.mosaipix
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          tracks: internal
+          status: completed
+          releaseName: Mosaipix 1.0.${{ github.run_number }}
+
+      - name: Keep the bundle as a workflow artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mosaipix-${{ github.sha }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: ignore
+          retention-days: 14
