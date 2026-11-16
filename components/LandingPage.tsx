@@ -2,6 +2,7 @@ import Link from "next/link";
 import PixelMiniature from "@/components/PixelMiniature";
 import SiteBrand from "@/components/SiteBrand";
 import SiteFooter from "@/components/SiteFooter";
+import PublicNavMenu from "@/components/PublicNavMenu";
 import { guideCards, homeFacts, homeFaqs } from "@/lib/home-content";
 import { heroTemplate, type Locale } from "@/lib/templates";
 
@@ -14,9 +15,15 @@ export default function LandingPage({ locale }: { locale: Locale }) {
   return (
     <main>
       <a className="skip-link" href={studioHref}>{tr("Ouvrir le studio", "Open the studio")}</a>
+      <div className="public-navigation">
       <nav className="nav shell" aria-label={tr("Navigation principale", "Main navigation")}>
         <a className="brand" href="#top"><SiteBrand /></a>
         <div className="nav-links">
+          <PublicNavMenu>
+              <Link href={studioHref}>Studio</Link>
+              <a href="#how">{tr("Comment ça marche", "How it works")}</a>
+              <a href="#faq">FAQ</a>
+          </PublicNavMenu>
           <Link href={studioHref}>Studio</Link>
           <a href="#how">{tr("Comment ça marche", "How it works")}</a>
           <a href="#faq">FAQ</a>
@@ -27,6 +34,7 @@ export default function LandingPage({ locale }: { locale: Locale }) {
           </div>
         </div>
       </nav>
+      </div>
 
       <section className="hero shell" id="top">
         <div className="hero-copy">

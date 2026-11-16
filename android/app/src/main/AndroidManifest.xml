@@ -15,14 +15,19 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
-            android:exported="true">
+            android:exported="false" />
 
+        <!-- L'alias du lanceur Android doit rester public. MainActivity reste privée. -->
+        <!-- nosemgrep: java.android.security.exported_activity.exported_activity -->
+        <activity-alias
+            android:name=".LauncherActivity"
+            android:targetActivity=".MainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-        </activity>
+        </activity-alias>
 
         <provider
             android:name="androidx.core.content.FileProvider"
