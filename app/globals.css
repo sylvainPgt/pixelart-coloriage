@@ -100,7 +100,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .hero h1 { margin: 20px 0 28px; font-size: clamp(58px, 7vw, 92px); line-height: .93; }
 .hero h1 em { color: var(--pink); font-style: normal; }
 .hero-copy > p { max-width: 550px; color: var(--muted); font-size: 19px; line-height: 1.65; }
-.hero-copy small { display: block; margin-top: 25px; color: #797686; }
+.hero-copy small { display: block; margin-top: 25px; color: #66637a; }
 .primary {
   display: inline-flex;
   align-items: center;
@@ -548,7 +548,7 @@ body.editor-expanded { overflow: hidden; }
 .guide-library .section-heading, .faq-section .section-heading { text-align: center; }
 .guide-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 42px; }
 .guide-cards article { display: flex; flex-direction: column; min-height: 320px; padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: white; box-shadow: 0 16px 40px #18172d0a; }
-.guide-cards article > span { color: #c8c2d3; font-family: var(--font-display), serif; font-size: 38px; font-weight: 800; }
+.guide-cards article > span { color: #857f96; font-family: var(--font-display), serif; font-size: 38px; font-weight: 800; }
 .guide-cards h3 { margin: 22px 0 10px; font-family: var(--font-display), serif; font-size: 25px; line-height: 1.15; letter-spacing: -.025em; }
 .guide-cards p { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .guide-cards a { display: inline-flex; gap: 10px; margin-top: auto; color: var(--purple); font-weight: 900; text-decoration: none; }
