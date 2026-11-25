@@ -1,6 +1,5 @@
 import streamlit as st
-st.set_page_config(page_title="Créer un coloriage pixel art", page_icon="🖼️", layout="centered")
-
+st.set_page_config(page_title="Créer un coloriage pixel art", layout="wide")
 from PIL import Image, ImageDraw
 import numpy as np
 import io
@@ -12,9 +11,15 @@ def get_base64_image(path):
         data = f.read()
     return base64.b64encode(data).decode()
 
+# Chargement CSS local (boutons, sliders, etc.)
+def local_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+local_css("style.css")
+
 # Injecte l'image de fond pixel art en base64
 bg_base64 = get_base64_image("assets/background.png")
-
 st.markdown(f"""
     <style>
         .stApp {{
@@ -41,7 +46,56 @@ st.markdown(f"""
             margin: 1rem;
             padding: 1rem;
         }}
+        @media (max-width: 768px) {{
+            .block-container {{
+                padding: 1rem;
+                margin: 1rem;
+            }}
+            h1 {{
+                font-size: 1.8rem;
+            }}
+            .sidebar .css-1v0mbdj {{
+                font-size: 1rem;
+            }}
+            section[data-testid="stSidebar"] {{
+                display: none;
+            }}
+            .sidebar-toggle {{
+                display: block;
+                position: fixed;
+                top: 1rem;
+                left: 1rem;
+                background-color: rgba(255,255,255,0.7);
+                border: none;
+                border-radius: 0.5rem;
+                padding: 0.5rem 1rem;
+                font-size: 1rem;
+                z-index: 9999;
+                cursor: pointer;
+            }}
+        }}
+        h1 {{
+            text-align: center;
+            margin-bottom: 1rem;
+        }}
     </style>
+    <script>
+        document.addEventListener('click', function(e) {{
+            const sidebar = document.querySelector('section[data-testid="stSidebar"]');
+            const toggleBtn = document.querySelector('.sidebar-toggle');
+            if (sidebar && toggleBtn && window.innerWidth <= 768) {{
+                const clickedInside = sidebar.contains(e.target) || toggleBtn.contains(e.target);
+                if (!clickedInside) {{
+                    sidebar.style.display = 'none';
+                    toggleBtn.style.display = 'block';
+                }}
+            }}
+        }});
+        const sidebar = document.querySelector('section[data-testid="stSidebar"]');
+        if (sidebar) {{
+            sidebar.style.transition = 'all 0.3s ease';
+        }}
+    </script>
 """, unsafe_allow_html=True)
 
 # Fonction de génération du pixel art (sans matplotlib)
@@ -63,16 +117,12 @@ def generate_pixel_art(image: Image.Image, grid_size=20, point_radius=0.12):
             draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), fill=color)
             draw.rectangle((j * cell_size, i * cell_size, (j + 1) * cell_size, (i + 1) * cell_size), outline="gray")
 
-    # Sauvegarde l'image et la taille de grille dans session_state
-    st.session_state["last_image"] = img
-    st.session_state["grid_size"] = grid_size
-
     buf = io.BytesIO()
     output.save(buf, format="PNG")
     buf.seek(0)
     return buf
 
-# Texte multilingue
+# -------------------- MULTILINGUE --------------------
 TEXT = {
     "fr": {
         "title": "Créer un coloriage pixel art",
@@ -98,7 +148,30 @@ TEXT = {
     }
 }
 
-# Sélecteur de langue
+# Bouton de toggle de la sidebar sur mobile
+st.markdown("""
+    <script>
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'sidebar-toggle';
+    toggleBtn.innerHTML = '☰';
+    toggleBtn.onclick = function() {
+        const sidebar = document.querySelector('section[data-testid="stSidebar"]');
+        if (sidebar) {
+            sidebar.style.display = 'block';
+            sidebar.style.opacity = 0;
+            sidebar.style.transform = 'translateX(-10px)';
+            setTimeout(() => {
+                sidebar.style.opacity = 1;
+                sidebar.style.transform = 'translateX(0)';
+            }, 10);
+        }
+        this.style.display = 'none';
+    };
+    document.body.appendChild(toggleBtn);
+    </script>
+""", unsafe_allow_html=True)
+
+# Sélecteur de langue avec affichage
 lang = st.sidebar.selectbox(
     "🌐 Language / Langue",
     ["fr", "en"],
@@ -109,7 +182,7 @@ lang = st.sidebar.selectbox(
 title = TEXT[lang]["title"]
 st.markdown(f"<h1>{title}</h1>", unsafe_allow_html=True)
 
-# Intro
+# Texte d'intro
 st.markdown(f"""
 <p style='font-size: 1.2rem; text-align: center; max-width: 700px; margin: auto;'>
     {TEXT[lang]['intro']}
@@ -121,7 +194,11 @@ uploaded_file = st.file_uploader("Image (JPG ou PNG)", type=["jpg", "jpeg", "png
 
 st.subheader(TEXT[lang]["step2"])
 grid_size = st.slider(TEXT[lang]["grid_slider"], 5, 50, 20)
-point_radius = st.slider(TEXT[lang]["point_slider"], 0.0, 1.0, 0.12, 0.01, format="%.2f")
+point_radius = st.slider(
+    TEXT[lang]["point_slider"],
+    min_value=0.0, max_value=1.0, value=0.12, step=0.01, format="%.2f"
+)
+
 
 if uploaded_file:
     st.subheader(TEXT[lang]["step3"])
@@ -132,3 +209,11 @@ if uploaded_file:
     buf = generate_pixel_art(image, grid_size=grid_size, point_radius=point_radius)
     st.image(buf, caption=TEXT[lang]["step4"], use_container_width=True)
     st.download_button(TEXT[lang]["download"], buf, file_name="grille_coloriage.png", mime="image/png")
+
+    # 🎮 Mode coloriage en ligne déplacé vers une seconde page
+
+    # Sauvegarde pour la page de coloriage en ligne
+    resized_image = image.convert("RGB").resize((grid_size, grid_size), Image.NEAREST)
+    st.session_state["last_image"] = resized_image
+    st.session_state["grid_size"] = grid_size
+    st.session_state["point_radius"] = point_radius

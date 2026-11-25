@@ -1,0 +1,16 @@
+Launch the venv:
+\venv\Scripts\activate
+
+Save the requirements.txt
+pip freeze > requirements.txt
+
+Workflow:
+Launch the websocket server (from the folder with the python file):
+python -m uvicorn websocket_server:app --reload --port 8000
+
+Go the react dev server and launch it:
+cd ..\coloring_grid_component\frontend && npm start
+
+Launch the webapp:
+python -m streamlit run '.\0_Créer un coloriage pixel art.py'
+
